@@ -10,11 +10,13 @@ struct ImageItem {
     let creationDate: Date?
 }
 
+// このクラスは、画像ファイルの入出力（IO）を担当します。
+// ファイルシステムから画像を読み込む機能を提供します。
 final class ImageRepository {
     static let shared = ImageRepository()
     
     // 拡張子リスト（必要なら追加）
-    var allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "webp"]
+    var allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif"]
     
     // サムネイルキャッシュ
     private let thumbCache = NSCache<NSURL, NSImage>()
