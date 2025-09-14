@@ -1,25 +1,15 @@
 import Foundation
-import Combine
 
-final class ImageRepository: ObservableObject {
-    @Published var images: [URL] = [
-        URL(fileURLWithPath: "/dev/null") // ダミー
-    ]
-
-    // MARK: - Public API
-    func add(_ url: URL) {
-        images.append(url)
-    }
-
-    func remove(at index: Int) {
-        guard images.indices.contains(index) else { return }
-        images.remove(at: index)
-    }
-
-    func move(from source: Int, to destination: Int) {
-        guard images.indices.contains(source),
-              images.indices.contains(destination) else { return }
-        let item = images.remove(at: source)
-        images.insert(item, at: destination)
+class ImageRepository {
+    static let shared = ImageRepository()
+    
+    private init() {}
+    
+    func fetchLocalImages(from folder: URL) -> [URL] {
+        let fm = FileManager.default
+        guard let items = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        return items.filter { $0.pathExtension.lowercased() == "jpg" }
     }
 }
