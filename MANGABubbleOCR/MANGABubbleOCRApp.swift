@@ -5,7 +5,8 @@ struct MANGABubbleOCRApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(ImageViewerModel.shared) // モデルを注入
+                .environmentObject(ImageViewerModel.shared)
         }
+        .windowStyle(.hiddenTitleBar)   // ← タイトルバーを非表示
     }
 }
