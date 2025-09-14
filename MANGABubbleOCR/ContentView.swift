@@ -44,7 +44,7 @@ struct ContentView: View {
                                         Image(nsImage: image)
                                             .resizable() // 画像のリサイズを可能にします。
                                             .aspectRatio(contentMode: .fit) // アスペクト比を維持してフィットさせます。
-                                            .frame(height: 120) // 高さを120ポイントに固定します。
+                                            .frame(height: 200) // 高さを120ポイントに固定します。
                                             .clipped() // フレーム外にはみ出した部分を切り取ります。
                                     }
                                     // ボタンのスタイルを、装飾のないシンプルなものに設定します。
@@ -70,23 +70,28 @@ struct ContentView: View {
                     // 左側にスペーサーを配置し、ボタンを右寄せにします。
                     Spacer()
                     
-                    // フォルダを選択するためのボタン。
-                    Button("フォルダを選択") {
-                        // ボタンがタップされたらopenFolder()メソッドを呼び出します。
-                        openFolder()
+                    VStack{
+                        // 画像が読み込まれている場合のみ、サムネイルボタンを表示します。
+                        if !model.images.isEmpty {
+                            // サムネイル表示と1枚表示を切り替えるためのボタン。
+                            Button(showThumbnails ? "1枚表示" : "サムネイル") {
+                                // ボタンがタップされたらshowThumbnailsの値を反転させます。
+                                showThumbnails.toggle()
+                            }
+                            .padding(8) // ボタンの周りに8ポイントの余白を追加します。
+                            .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
+                            .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
+                        }
+
+                        // フォルダを選択するためのボタン。
+                        Button("フォルダを選択") {
+                            // ボタンがタップされたらopenFolder()メソッドを呼び出します。
+                            openFolder()
+                        }
+                        .padding(8) // ボタンの周りに8ポイントの余白を追加します。
+                        .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
+                        .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
                     }
-                    .padding(8) // ボタンの周りに8ポイントの余白を追加します。
-                    .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
-                    .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
-                    
-                    // サムネイル表示と1枚表示を切り替えるためのボタン。
-                    Button(showThumbnails ? "1枚表示" : "サムネイル") {
-                        // ボタンがタップされたらshowThumbnailsの値を反転させます。
-                        showThumbnails.toggle()
-                    }
-                    .padding(8) // ボタンの周りに8ポイントの余白を追加します。
-                    .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
-                    .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
                 }
                 .padding() // HStackの周りに余白を追加します。
             }
