@@ -44,7 +44,7 @@ struct ContentView: View {
                                         Image(nsImage: image)
                                             .resizable() // 画像のリサイズを可能にします。
                                             .aspectRatio(contentMode: .fit) // アスペクト比を維持してフィットさせます。
-                                            .frame(height: 200) // 高さを120ポイントに固定します。
+                                            .frame(height: 200) // 高さを200ポイントに固定します。
                                             .clipped() // フレーム外にはみ出した部分を切り取ります。
                                     }
                                     // ボタンのスタイルを、装飾のないシンプルなものに設定します。
@@ -113,9 +113,10 @@ struct ContentView: View {
             // 選択されたフォルダのURLが正常に取得できた場合の処理。
             if let url = panel.url {
                 // ImageRepositoryを使用して、選択されたフォルダから画像を取得します。
-                let images = ImageRepository.shared.fetchLocalImages(from: url)
-                // 取得した画像リストをモデルに設定します。
-                model.setImages(images)
+//                let images = ImageRepository.shared.fetchLocalImages(from: url)
+//                // 取得した画像リストをモデルに設定します。
+//                model.setImages(images)
+                model.loadFolder(url)
             }
         }
     }

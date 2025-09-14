@@ -30,4 +30,17 @@ class ImageViewerModel: ObservableObject {
         // 現在のインデックスを先頭（0）にリセットします。
         self.currentIndex = 0
     }
+    
+    func loadFolder(_ folder: URL) {
+        ImageRepository.shared.fetchLocalImagesAsync(from: folder) { [weak self] urls in
+            DispatchQueue.main.async {
+                self?.images = urls
+                self?.currentIndex = 0
+            }
+        }
+    }
+    // サムネを表示したいとき
+    func thumbnail(for url: URL) -> NSImage? {
+        ImageRepository.shared.thumbnail(for: url, maxPixelSize: 200)
+    }
 }
