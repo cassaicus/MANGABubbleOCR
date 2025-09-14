@@ -32,7 +32,7 @@ struct ContentView: View {
                             // 画像のインデックスをループ処理します。
                             ForEach(model.images.indices, id: \.self) { index in
                                 // URLからNSImageを正常に読み込めた場合の処理。
-                                if let image = NSImage(contentsOf: model.images[index]) {
+                                if let image = model.thumbnail(for: model.images[index]) {
                                     // ボタンとして画像を表示します。
                                     Button(action: {
                                         // ボタンがタップされたら、モデルの現在のインデックスを更新します。
