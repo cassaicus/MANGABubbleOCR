@@ -1,0 +1,7 @@
+path: /Users/ibis/dataset
+train: images/train
+val: images/val
+names:
+  0: speech_bubble
+  1: narration_box
+  2: sound_effect
