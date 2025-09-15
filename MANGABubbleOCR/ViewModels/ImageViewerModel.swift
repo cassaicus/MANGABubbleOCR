@@ -25,9 +25,18 @@ class ImageViewerModel: ObservableObject {
     /// この値が変更されると、表示される画像も更新されます。
     @Published var currentIndex: Int = 0
 
+    /// OCRエンジンへの参照。
+    private let ocrEngine: OCREngine?
+
     /// シングルトンパターンを強制するため、初期化子をプライベートに設定します。
     /// 外部からの直接的なインスタンス化を防ぎます。
-    private init() {}
+    private init() {
+        // OCRエンジンを初期化します。失敗した場合はnilが設定されます。
+        self.ocrEngine = OCREngine()
+        if ocrEngine == nil {
+            print("ImageViewerModel: OCREngineの初期化に失敗しました。")
+        }
+    }
 
     /// 新しいページのリストでモデルを更新します。
     ///
@@ -172,13 +181,17 @@ class ImageViewerModel: ObservableObject {
                 newBubble.height = rect.size.height
                 newBubble.page = page
 
-                // 画像を切り出して保存
+                // 画像を切り出して保存し、OCRを実行
                 if let croppedCGImage = cgImage.cropping(to: rect) {
                     let fileName = "\(bubbleID).png"
                     let fileURL = tempDir.appendingPathComponent(fileName)
                     do {
                         try croppedCGImage.save(to: fileURL)
                         print("Saved cropped image to: \(fileURL.path)")
+
+                        // OCR実行
+                        runOCR(on: croppedCGImage, bubbleID: bubbleID)
+
                     } catch {
                         print("Failed to save cropped image: \(error)")
                     }
@@ -247,5 +260,22 @@ class ImageViewerModel: ObservableObject {
         newBook.title = "Default Book"
         newBook.folderPath = "" // プレースホルダー
         return newBook
+    }
+
+    /// 指定された画像に対してOCRを実行し、結果をコンソールに出力します。
+    /// - Parameters:
+    ///   - cgImage: OCRを実行する画像。
+    ///   - bubbleID: どのフキダシに属するかを示すID。
+    private func runOCR(on cgImage: CGImage, bubbleID: UUID) {
+        guard let engine = self.ocrEngine else {
+            print("OCR for \(bubbleID): Engine not available.")
+            return
+        }
+
+        // OCR処理は重い可能性があるため、バックグラウンドスレッドで実行
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+            print("OCR Result for bubble [\(bubbleID)]: \(result)")
+        }
     }
 }
