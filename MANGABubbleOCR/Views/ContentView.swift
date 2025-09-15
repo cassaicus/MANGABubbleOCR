@@ -25,36 +25,9 @@ struct ContentView: View {
             } else {
                 // showThumbnailsがtrueの場合の処理。
                 if showThumbnails {
-                    // サムネイルの一覧をスクロール表示します。
-                    ScrollView {
-                        // LazyVGridを使用して、5列のグリッドレイアウトを作成します。
-                        LazyVGrid(columns: Array(repeating: .init(.flexible(), spacing: 10), count: 5), spacing: 10) {
-                            // ページのインデックスをループ処理します。
-                            ForEach(model.pages.indices, id: \.self) { index in
-                                // ボタンとして画像を表示します。
-                                Button(action: {
-                                    // ボタンがタップされたら、モデルの現在のインデックスを更新します。
-                                    model.currentIndex = index
-                                    // 1枚表示モードに切り替えます。
-                                    showThumbnails = false
-                                }) {
-                                    // AsyncImageViewを使用してサムネイルを非同期に読み込み、表示します。
-                                    AsyncImageView(url: model.pages[index].sourceURL, maxSize: 200)
-                                        .frame(height: 200) // 高さを200ポイントに固定します。
-                                        .clipped() // フレーム外にはみ出した部分を切り取ります。
-                                        .overlay(
-                                             // 現在選択中の画像に青い枠を表示します。
-                                             RoundedRectangle(cornerRadius: 4)
-                                                 .stroke(Color.blue, lineWidth: 4)
-                                                 .opacity(index == model.currentIndex ? 1 : 0)
-                                         )
-                                }
-                                // ボタンのスタイルを、装飾のないシンプルなものに設定します。
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding() // グリッドの周りに余白を追加します。
-                    }
+                    // 新しく作成したサムネイル表示ビューを呼び出します。
+                    // showThumbnailsの状態をBindingで渡すことで、サムネイルビュー側での表示切替を可能にします。
+                    ThumbnailScrollView(showThumbnails: $showThumbnails)
                 } else {
                     // 1枚の画像をスライド表示するためのビュー。
                     PageControllerView(model: model)
