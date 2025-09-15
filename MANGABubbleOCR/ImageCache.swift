@@ -38,41 +38,62 @@ final class ImageCache {
 }
 
 extension ImageCache {
+    /// 内部で利用する、URLから画像データを非同期に読み込むヘルパー関数。
+    private func loadImageData(from url: URL) async -> Data? {
+        if url.isFileURL {
+            return try? Data(contentsOf: url)
+        }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return data
+        } catch {
+            print("画像のダウンロードに失敗しました: \(url) - \(error)")
+            return nil
+        }
+    }
+
     /// 指定されたURLのサムネイルを非同期で生成またはキャッシュから取得します。
     ///
-    /// キャッシュにサムネイルが存在すればそれを即座に返します。
-    /// 存在しない場合は、URLから画像データを非同期にダウンロードし、
-    /// リサイズしてサムネイルを生成し、キャッシュに保存した上で返します。
+    /// サムネイルはフルサイズの画像とは別のキーでキャッシュされます。
     /// - Parameters:
     ///   - url: サムネイルを取得したい画像のURL。
     ///   - maxSize: サムネイルの最大サイズ（幅または高さ）。
     /// - Returns: 生成または取得したサムネイル画像。処理に失敗した場合は`nil`。
     func thumbnail(for url: URL, maxSize: CGFloat = 200) async -> NSImage? {
-        // キャッシュに画像があれば即座に返す
+        // サムネイル用にユニークなキャッシュキーを生成
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "thumbnail_size", value: "\(maxSize)")]
+        let thumbKey = components.url!
+
+        if let cachedImage = image(for: thumbKey) {
+            return cachedImage
+        }
+
+        guard let data = await loadImageData(from: url), let image = NSImage(data: data) else {
+            return nil
+        }
+
+        let thumbnail = image.resized(toMax: maxSize)
+        setImage(thumbnail, for: thumbKey)
+        return thumbnail
+    }
+
+    /// 指定されたURLのフルサイズの画像を非同期で取得またはキャッシュから取得します。
+    ///
+    /// - Parameter url: 画像を取得したいURL。
+    /// - Returns: 取得したフルサイズの画像。処理に失敗した場合は`nil`。
+    func fullImage(for url: URL) async -> NSImage? {
         if let cachedImage = image(for: url) {
             return cachedImage
         }
 
-        // ローカルファイルの場合は、同期的に読み込む
-        if url.isFileURL {
-            guard let image = NSImage(contentsOf: url) else { return nil }
-            let thumbnail = image.resized(toMax: maxSize)
-            setImage(thumbnail, for: url)
-            return thumbnail
-        }
-
-        // ネットワーク上のURLの場合は、非同期でダウンロードする
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let image = NSImage(data: data) else { return nil }
-
-            let thumbnail = image.resized(toMax: maxSize)
-            setImage(thumbnail, for: url)
-            return thumbnail
-        } catch {
-            print("画像のダウンロードに失敗しました: \(error)")
+        guard let data = await loadImageData(from: url), let image = NSImage(data: data) else {
             return nil
         }
+
+        setImage(image, for: url)
+        return image
     }
 }
 

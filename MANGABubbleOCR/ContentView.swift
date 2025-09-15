@@ -80,8 +80,8 @@ struct ContentView: View {
 
                         // フォルダを選択するためのボタン。
                         Button("フォルダを選択") {
-                            // ボタンがタップされたらopenFolder()メソッドを呼び出します。
-                            openFolder()
+                            // ボタンがタップされたらモデルのメソッドを呼び出します。
+                            model.selectAndLoadFolder()
                         }
                         .padding(8) // ボタンの周りに8ポイントの余白を追加します。
                         .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
@@ -89,26 +89,6 @@ struct ContentView: View {
                     }
                 }
                 .padding() // HStackの周りに余白を追加します。
-            }
-        }
-    }
-    
-    // フォルダ選択パネルを開き、選択されたフォルダから画像を読み込むプライベートメソッド。
-    private func openFolder() {
-        // NSOpenPanelのインスタンスを作成します。
-        let panel = NSOpenPanel()
-        // ディレクトリの選択を許可します。
-        panel.canChooseDirectories = true
-        // ファイルの選択を禁止します。
-        panel.canChooseFiles = false
-        // 複数選択を禁止します。
-        panel.allowsMultipleSelection = false
-        // パネルをモーダルで表示し、ユーザーが「OK」をクリックした場合の処理。
-        if panel.runModal() == .OK {
-            // 選択されたフォルダのURLが正常に取得できた場合の処理。
-            if let url = panel.url {
-                // 選択されたフォルダのURLをモデルに渡し、非同期で画像の読み込みを開始します。
-                model.loadFolder(url)
             }
         }
     }

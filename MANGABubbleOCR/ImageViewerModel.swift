@@ -12,14 +12,6 @@ class ImageViewerModel: ObservableObject {
     // 現在表示している画像のインデックス。@Publishedプロパティラッパーにより、この値が変更されるとUIが自動的に更新されます。
     @Published var currentIndex: Int = 0
     
-    // 現在表示している画像（NSImage）を返すコンピューテッドプロパティ。
-    var currentImage: NSImage? {
-        // 現在のインデックスが画像の範囲内にあるかを確認します。
-        guard currentIndex >= 0, currentIndex < images.count else { return nil }
-        // インデックスに対応するURLからNSImageを生成して返します。
-        return NSImage(contentsOf: images[currentIndex])
-    }
-    
     // 外部からのインスタンス化を防ぐために、initをprivateに設定します。
     private init() {}
     
@@ -37,6 +29,17 @@ class ImageViewerModel: ObservableObject {
                 self?.images = urls
                 self?.currentIndex = 0
             }
+        }
+    }
+
+    /// フォルダ選択ダイアログを表示し、選択されたフォルダから画像を読み込みます。
+    func selectAndLoadFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            loadFolder(url)
         }
     }
 }

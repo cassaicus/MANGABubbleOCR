@@ -69,8 +69,8 @@ class PageController: NSPageController, NSPageControllerDelegate {
         // viewControllerをImagePageViewControllerに、objectをURLにキャストできるか確認します。
         guard let vc = viewController as? ImagePageViewController,
               let url = object as? URL else { return }
-        // キャストが成功した場合、ビューコントローラーに表示する画像（NSImage）を設定します。
-        vc.image = NSImage(contentsOf: url)
+        // キャストが成功した場合、ビューコントローラーに表示する画像のURLを設定します。
+        vc.imageURL = url
     }
     
     // ページのトランジションアニメーションが完了した後に呼び出されるデリゲートメソッド。
@@ -83,33 +83,44 @@ class PageController: NSPageController, NSPageControllerDelegate {
 }
 
 // MARK: - 画像表示用VC
-// 1枚の画像を表示するためのNSViewController。
+// 1枚の画像を非同期に表示するためのNSViewController。
 class ImagePageViewController: NSViewController {
-    // 表示するNSImage。
-    var image: NSImage?
-    // 画像を表示するためのNSImageView。
-    private var imageView: NSImageView!
-    
-    // このビューコントローラーのビューを生成または読み込むために呼び出されます。
-    override func loadView() {
-        // NSImageViewのインスタンスを生成します。
-        imageView = NSImageView()
-        // 画像のスケーリング方法を、アスペクト比を維持して拡大・縮小するように設定します。
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        // 画像の配置を中央に設定します。
-        imageView.imageAlignment = .alignCenter
-        // レイヤーバックのビューを有効にします。Core Animationの機能を利用するために必要です。
-        imageView.wantsLayer = true
-        // ビューの背景色を黒に設定します。
-        imageView.layer?.backgroundColor = NSColor.black.cgColor
-        // このビューコントローラーのメインビューとしてimageViewを設定します。
-        self.view = imageView
+    // 表示する画像のURL。
+    var imageURL: URL? {
+        didSet {
+            // URLが設定されたら、ビューを更新する必要があるか確認します。
+            if isViewLoaded, let url = imageURL {
+                updateView(with: url)
+            }
+        }
     }
     
-    // ビューが画面に表示される直前に呼び出されます。
-    override func viewWillAppear() {
-        super.viewWillAppear()
-        // imageViewに表示する画像を設定します。
-        imageView.image = image
+    private var hostingController: NSHostingController<AnyView>?
+
+    // このビューコントローラーのビューを生成または読み込むために呼び出されます。
+    override func loadView() {
+        // 初期ビューとして空のNSViewを設定します。
+        self.view = NSView()
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        if let url = imageURL {
+            updateView(with: url)
+        }
+    }
+    
+    private func updateView(with url: URL) {
+        // 既存のホスティングコントローラーがあれば削除
+        hostingController?.view.removeFromSuperview()
+        hostingController?.removeFromParent()
+
+        // AsyncFullImageViewをホストする新しいNSHostingControllerを作成
+        let newHostingController = NSHostingController(rootView: AnyView(AsyncFullImageView(url: url)))
+        addChild(newHostingController)
+        newHostingController.view.frame = self.view.bounds
+        newHostingController.view.autoresizingMask = [.width, .height]
+        self.view.addSubview(newHostingController.view)
+        self.hostingController = newHostingController
     }
 }
