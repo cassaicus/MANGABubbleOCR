@@ -45,16 +45,24 @@ struct ContentView: View {
                     Spacer()
                     
                     VStack{
-                        // ページが読み込まれている場合のみ、サムネイルボタンを表示します。
+                        // ページが読み込まれている場合のみ、コントロールボタンを表示します。
                         if !model.pages.isEmpty {
                             // サムネイル表示と1枚表示を切り替えるためのボタン。
                             Button(showThumbnails ? "1枚表示" : "サムネイル") {
                                 // ボタンがタップされたらshowThumbnailsの値を反転させます。
                                 showThumbnails.toggle()
                             }
-                            .padding(8) // ボタンの周りに8ポイントの余白を追加します。
-                            .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
-                            .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            // セリフ抽出を実行するためのボタン
+                            Button("セリフを抽出") {
+                                model.analyzeCurrentImageForTextBubbles()
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
 
                         // フォルダを選択するためのボタン。

@@ -1,4 +1,6 @@
 import SwiftUI
+import Vision
+import CoreML
 
 /// アプリケーション全体のUI状態とデータフローを管理する主要なViewModel。
 ///
@@ -52,6 +54,117 @@ class ImageViewerModel: ObservableObject {
         panel.allowsMultipleSelection = false
         if panel.runModal() == .OK, let url = panel.url {
             loadFolder(url)
+        }
+    }
+
+    // MARK: - Core ML and Vision Integration
+
+    /// 現在表示されている画像からセリフのフキダシを検出し、一時ファイルとして保存します。
+    func analyzeCurrentImageForTextBubbles() {
+        // 現在のページが存在するか確認
+        guard currentIndex < pages.count else {
+            print("現在のページが見つかりません。")
+            return
+        }
+        let currentPage = pages[currentIndex]
+        let imageURL = currentPage.sourceURL
+
+        // isProcessing = true // 処理中のUIフィードバック用フラグ（必要に応じて追加）
+
+        Task {
+            // ImageCacheからフルサイズの画像を非同期で取得
+            guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
+                  let cgImage = nsImage.cgImage() else {
+                print("画像の読み込みまたはCGImageへの変換に失敗しました。")
+                // isProcessing = false
+                return
+            }
+
+            // Visionリクエストを実行
+            performVisionRequest(with: cgImage)
+        }
+    }
+
+    /// Visionリクエストを実行して、画像内のオブジェクト（フキダシ）を検出します。
+    /// - Parameter cgImage: 分析対象のCGImage。
+    private func performVisionRequest(with cgImage: CGImage) {
+        do {
+            // Core MLモデルのURLを取得
+            guard let modelURL = Bundle.main.url(forResource: "best", withExtension: "mlmodelc") else {
+                print("モデルファイル(best.mlmodelc)が見つかりません。")
+                return
+            }
+
+            // モデルをロードしてVisionリクエストを作成
+            let mlModel = try MLModel(contentsOf: modelURL)
+            let vnModel = try VNCoreMLModel(for: mlModel)
+
+            let request = VNCoreMLRequest(model: vnModel) { [weak self] request, error in
+                if let error = error {
+                    print("Visionリクエストエラー: \(error)")
+                    return
+                }
+
+                guard let results = request.results as? [VNRecognizedObjectObservation] else { return }
+
+                let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+                var count = 0
+
+                // 結果をループして、検出されたオブジェクトを処理
+                for obs in results {
+                    guard let topLabel = obs.labels.first else { continue }
+
+                    let rect = obs.boundingBox
+                        .toPixelRectFlipped(in: imageSize)
+                        .integralWithin(imageSize: imageSize)
+
+                    if let cropped = cgImage.cropping(to: rect) {
+                        self?.saveCroppedImage(cropped, index: count, label: topLabel.identifier, confidence: topLabel.confidence)
+                        count += 1
+                    }
+                }
+                print("保存されたフキダシの数: \(count)")
+            }
+
+            request.imageCropAndScaleOption = .scaleFit
+
+            // 画像リクエストハンドラを作成して実行
+            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
+            try handler.perform([request])
+
+        } catch {
+            print("モデルの読み込みまたは推論エラー: \(error)")
+        }
+    }
+
+    /// 切り抜いた画像を一時ディレクトリに保存します。
+    /// - Parameters:
+    ///   - cgImage: 保存するCGImage。
+    ///   - index: 画像のインデックス（ファイル名に使用）。
+    ///   - label: 検出されたオブジェクトのラベル。
+    ///   - confidence: 検出の信頼度。
+    private func saveCroppedImage(_ cgImage: CGImage, index: Int, label: String, confidence: Float) {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("cropped_bubbles")
+        do {
+            // 一時ディレクトリが存在しない場合は作成
+            if !FileManager.default.fileExists(atPath: tempDir.path) {
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+            }
+
+            let fileName = "cropped_\(index)_\(label)_\(String(format: "%.2f", confidence)).png"
+            let fileURL = tempDir.appendingPathComponent(fileName)
+
+            // 既存のファイルを削除
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+
+            // CGImageをPNGとして保存（VisionExtensions.swiftの拡張機能を使用）
+            try cgImage.save(to: fileURL)
+            print("画像を保存しました: \(fileURL.path)")
+
+        } catch {
+            print("切り抜いた画像の保存に失敗しました: \(error)")
         }
     }
 }
