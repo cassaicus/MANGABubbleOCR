@@ -113,7 +113,8 @@ class ImageViewerModel: ObservableObject {
                     return
                 }
                 guard let results = request.results as? [VNRecognizedObjectObservation] else { return }
-                self?.saveBubbles(results, for: imageData, originalFileName: originalFileName, imageSize: CGSize(width: cgImage.width, height: cgImage.height))
+                // cgImageを渡すように変更
+                self?.saveBubbles(results, for: imageData, originalFileName: originalFileName, cgImage: cgImage)
             }
             request.imageCropAndScaleOption = .scaleFit
             let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
@@ -123,16 +124,30 @@ class ImageViewerModel: ObservableObject {
         }
     }
     
-    /// 検出されたフキダシの情報をCore Dataに保存します。
+    /// 検出されたフキダシの情報をCore Dataに保存し、切り抜いた画像を一時フォルダに保存します。
     ///
     /// このメソッドは、まず画像データのハッシュを計算して、対応する`Page`エンティティを検索または作成します。
     /// 既存のフキダシ情報を削除した後、新しい検出結果を`BubbleEntity`として保存します。
+    /// 同時に、各フキダシの領域を`cgImage`から切り出し、一時ディレクトリにPNGファイルとして保存します。
     /// - Parameters:
     ///   - results: Visionリクエストから得られた検出結果の配列。
     ///   - imageData: ハッシュ計算とページ識別のための画像データ。
     ///   - originalFileName: ページの元のファイル名。
-    ///   - imageSize: 座標変換のための画像のサイズ。
-    private func saveBubbles(_ results: [VNRecognizedObjectObservation], for imageData: Data, originalFileName: String, imageSize: CGSize) {
+    ///   - cgImage: 切り出し元のCGImage。
+    private func saveBubbles(_ results: [VNRecognizedObjectObservation], for imageData: Data, originalFileName: String, cgImage: CGImage) {
+        let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+
+        // 切り抜いた画像を保存する一時ディレクトリを作成
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("cropped_bubbles")
+        do {
+            if !FileManager.default.fileExists(atPath: tempDir.path) {
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+            }
+        } catch {
+            print("Failed to create temporary directory: \(error)")
+            return // ディレクトリがなければ処理を続行できない
+        }
+
         viewContext.perform {
             let hash = DataHasher.computeSHA256(for: imageData)
             let page = self.fetchOrCreatePage(with: hash, originalFileName: originalFileName)
@@ -144,16 +159,30 @@ class ImageViewerModel: ObservableObject {
                 }
             }
             
-            // 新しいフキダシを保存
+            // 新しいフキダシを保存し、画像を切り抜く
             for observation in results {
                 let newBubble = BubbleEntity(context: self.viewContext)
                 let rect = observation.boundingBox.toPixelRectFlipped(in: imageSize)
-                newBubble.bubbleID = UUID()
+                let bubbleID = UUID()
+
+                newBubble.bubbleID = bubbleID
                 newBubble.x = rect.origin.x
                 newBubble.y = rect.origin.y
                 newBubble.width = rect.size.width
                 newBubble.height = rect.size.height
                 newBubble.page = page
+
+                // 画像を切り出して保存
+                if let croppedCGImage = cgImage.cropping(to: rect) {
+                    let fileName = "\(bubbleID).png"
+                    let fileURL = tempDir.appendingPathComponent(fileName)
+                    do {
+                        try croppedCGImage.save(to: fileURL)
+                        print("Saved cropped image to: \(fileURL.path)")
+                    } catch {
+                        print("Failed to save cropped image: \(error)")
+                    }
+                }
             }
             
             do {
