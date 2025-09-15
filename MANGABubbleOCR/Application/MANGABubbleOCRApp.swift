@@ -30,6 +30,8 @@ struct MANGABubbleOCRApp: App {
                 // .environmentObject修飾子を使って、ImageViewerModelの共有インスタンスを
                 // ContentViewおよびその全てのサブビューで利用できるようにします（環境オブジェクトとして注入）。
                 .environmentObject(ImageViewerModel.shared)
+                .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext) // ← この行を追加
+
         }
         // ウィンドウのスタイルを、タイトルバーが非表示になるように設定します。
         .windowStyle(.hiddenTitleBar)

@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0188C1E22E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 0188C1E02E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodeld */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		0188C1E12E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = MANGABubbleOCR.xcdatamodel; sourceTree = "<group>"; };
 		01F901ED2E764E9700120F81 /* MANGABubbleOCR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MANGABubbleOCR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -32,6 +37,7 @@
 		01F901E42E764E9700120F81 = {
 			isa = PBXGroup;
 			children = (
+				0188C1E02E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodeld */,
 				01F901EF2E764E9700120F81 /* MANGABubbleOCR */,
 				01F901EE2E764E9700120F81 /* Products */,
 			);
@@ -119,6 +125,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0188C1E22E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +328,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCVersionGroup section */
+		0188C1E02E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodeld */ = {
+			isa = XCVersionGroup;
+			children = (
+				0188C1E12E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodel */,
+			);
+			currentVersion = 0188C1E12E785B4D00BD6D3F /* MANGABubbleOCR.xcdatamodel */;
+			name = MANGABubbleOCR.xcdatamodeld;
+			path = MANGABubbleOCR/MANGABubbleOCR.xcdatamodeld;
+			sourceTree = "<group>";
+			versionGroupType = wrapper.xcdatamodel;
+		};
+/* End XCVersionGroup section */
 	};
 	rootObject = 01F901E52E764E9700120F81 /* Project object */;
 }
