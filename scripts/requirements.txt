@@ -1,0 +1,6 @@
+torch
+coremltools
+transformers
+fugashi
+unidic_lite
+Pillow
