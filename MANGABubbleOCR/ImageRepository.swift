@@ -3,31 +3,43 @@ import AppKit
 import ImageIO
 import Combine
 
+/// 画像のメタデータを表現する構造体。
+///
+/// ファイルシステムから取得した画像の基本的な情報を保持します。
 struct ImageItem {
+    /// 画像ファイルの場所を示すURL。
     let url: URL
+    /// ファイル名。
     let name: String
+    /// ファイルサイズ（バイト単位）。
     let fileSize: Int64?
+    /// ファイルの作成日。
     let creationDate: Date?
 }
 
-// このクラスは、画像ファイルの入出力（IO）を担当します。
-// ファイルシステムから画像を読み込む機能を提供します。
+/// 画像ファイルの入出力（IO）を担当するシングルトンクラス。
+///
+/// ファイルシステムから画像を読み込む機能や、指定されたディレクトリの変更を監視する機能を提供します。
 final class ImageRepository {
+    /// アプリケーション全体で共有される唯一のインスタンス。
     static let shared = ImageRepository()
     
-    // 拡張子リスト（必要なら追加）
+    /// 読み込みを許可する画像の拡張子セット。小文字で指定します。
     var allowedExtensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif"]
     
-    // サムネイルキャッシュ
-    private let thumbCache = NSCache<NSURL, NSImage>()
-    
-    // 監視用ハンドル
+    /// ディレクトリ変更を監視するためのDispatchSource。
     private var dirMonitorSource: DispatchSourceFileSystemObject?
+    /// 監視対象ディレクトリのファイルディスクリプタ。
     private var monitoredFD: Int32 = -1
     
+    /// シングルトンパターンを強制するため、`init`をプライベートに宣言します。
     private init() {}
     
-    // MARK: - 簡易同期取得（既存互換）
+    // MARK: - Image Fetching
+
+    /// 指定されたフォルダから画像ファイルのURLを同期的に取得します（非再帰）。
+    /// - Parameter folder: 画像を検索するフォルダのURL。
+    /// - Returns: 見つかった画像ファイルのURLの配列。ファイル名でソートされています。
     func fetchLocalImages(from folder: URL) -> [URL] {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else {
@@ -38,7 +50,11 @@ final class ImageRepository {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
     
-    // MARK: - 非同期（completion）
+    /// 指定されたフォルダから画像ファイルのURLを非同期的に取得します（完了コールバック形式）。
+    /// - Parameters:
+    ///   - folder: 画像を検索するフォルダのURL。
+    ///   - recursive: サブフォルダも再帰的に検索するかどうか。
+    ///   - completion: 取得完了時に呼び出されるコールバック。見つかったURLの配列を引数に取ります。
     func fetchLocalImagesAsync(from folder: URL, recursive: Bool = false, completion: @escaping ([URL]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { completion([]); return }
@@ -59,7 +75,11 @@ final class ImageRepository {
         }
     }
     
-    // MARK: - Swift concurrency 版（macOS 12+）
+    /// 指定されたフォルダから画像ファイルのURLを非同期的に取得します（Swift Concurrency版）。
+    /// - Parameters:
+    ///   - folder: 画像を検索するフォルダのURL。
+    ///   - recursive: サブフォルダも再帰的に検索するかどうか。
+    /// - Returns: 見つかった画像ファイルのURLの配列。ファイル名でソートされています。
     @available(macOS 12.0, *)
     func fetchLocalImagesAsync(from folder: URL, recursive: Bool = false) async -> [URL] {
         await withCheckedContinuation { cont in
@@ -69,7 +89,9 @@ final class ImageRepository {
         }
     }
     
-    // MARK: - メタデータ付き取得
+    /// 指定されたフォルダから画像のメタデータ(`ImageItem`)のリストを取得します。
+    /// - Parameter folder: 画像を検索するフォルダのURL。
+    /// - Returns: 見つかった画像の`ImageItem`の配列。
     func fetchImageItems(from folder: URL) -> [ImageItem] {
         let urls = fetchLocalImages(from: folder)
         let fm = FileManager.default
@@ -81,7 +103,14 @@ final class ImageRepository {
         }
     }
     
-    // MARK: - ディレクトリ監視（簡易）
+    // MARK: - Directory Monitoring
+
+    /// 指定されたフォルダの変更監視を開始します。
+    ///
+    /// フォルダ内でファイルの書き込み（作成、変更、削除）が検知されると、指定されたコールバックが実行されます。
+    /// - Parameters:
+    ///   - folder: 監視するフォルダのURL。
+    ///   - callback: 変更が検知されたときに実行されるコールバック。UIの更新はメインスレッドで行う必要があります。
     func startMonitoring(folder: URL, callback: @escaping () -> Void) {
         stopMonitoring()
         monitoredFD = open(folder.path, O_EVTONLY)
@@ -99,6 +128,7 @@ final class ImageRepository {
         dirMonitorSource?.resume()
     }
     
+    /// ディレクトリの変更監視を停止します。
     func stopMonitoring() {
         dirMonitorSource?.cancel()
     }

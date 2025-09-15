@@ -107,10 +107,7 @@ struct ContentView: View {
         if panel.runModal() == .OK {
             // 選択されたフォルダのURLが正常に取得できた場合の処理。
             if let url = panel.url {
-                // ImageRepositoryを使用して、選択されたフォルダから画像を取得します。
-//                let images = ImageRepository.shared.fetchLocalImages(from: url)
-//                // 取得した画像リストをモデルに設定します。
-//                model.setImages(images)
+                // 選択されたフォルダのURLをモデルに渡し、非同期で画像の読み込みを開始します。
                 model.loadFolder(url)
             }
         }
