@@ -28,12 +28,17 @@ class ImageViewerModel: ObservableObject {
             DispatchQueue.main.async {
                 self?.images = urls
                 self?.currentIndex = 0
+                // URLリストが確定したら、プリフェッチを開始
+                ThumbnailPrefetcher.shared.prefetchThumbnails(for: urls)
             }
         }
     }
 
     /// フォルダ選択ダイアログを表示し、選択されたフォルダから画像を読み込みます。
     func selectAndLoadFolder() {
+        // 新しいフォルダを選択する前に、進行中のプリフェッチをキャンセル
+        ThumbnailPrefetcher.shared.cancelAll()
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
