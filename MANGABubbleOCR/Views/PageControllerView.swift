@@ -30,6 +30,45 @@ struct PageControllerView: NSViewControllerRepresentable {
 class PageController: NSPageController, NSPageControllerDelegate {
     // 表示する画像のデータを持つImageViewerModel。
     var model: ImageViewerModel?
+    private var hasAppeared = false // 一度だけ実行するためのフラグ
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+
+        guard !hasAppeared, let model = model else { return }
+        hasAppeared = true
+
+        let currentIndex = model.currentIndex
+        let count = model.pages.count
+
+        // 表示中の画像がない場合は何もしません。
+        guard count > 0 else { return }
+
+        // NOTE: このメソッドは、ウィンドウのリサイズ時などに`NSPageController`がビューの更新を
+        // 正しく反映しないことがある問題への回避策（ワークアラウンド）です。
+        // インデックスを意図的に変更して戻すことで、ページの再読み込みを強制します。
+        if count == 1 {
+            // 画像が1枚しかない場合、他のインデックスに移動できないため、特殊な処理を行います。
+            // 一時的に無効なダミーページのリストを設定し、即座に元のページリストに戻すことで、リロードをトリガーします。
+            let originalPages = self.arrangedObjects
+            let dummyPage = MangaPage(sourceURL: URL(fileURLWithPath: "/dev/null"))
+            self.arrangedObjects = [dummyPage]
+
+            // UIの更新が反映されるよう、メインスレッドの次のサイクルで元のリストに戻します。
+            DispatchQueue.main.async {
+                self.arrangedObjects = originalPages
+                self.selectedIndex = 0
+            }
+            return
+        }
+
+        // 画像が複数ある場合は、よりシンプルな方法でリロードをトリガーします。
+        // 選択インデックスを一時的に別のインデックスに変更し、すぐに元に戻します。
+        // これにより、現在のページの`viewController`が再生成または再設定されることを期待しています。
+        let targetIndex = currentIndex == 0 ? 1 : 0 // 現在が0なら1へ、それ以外なら0へ。
+        self.selectedIndex = targetIndex
+        self.selectedIndex = currentIndex
+    }
     
     // ビューコントローラーのビューがメモリに読み込まれた後に呼び出されます。
     override func viewDidLoad() {
@@ -117,8 +156,7 @@ class ImagePageViewController: NSViewController {
 
         // AsyncFullImageViewをホストする新しいNSHostingControllerを作成
         // ここで .ignoresSafeArea() を追加して、タイトルバー領域にも表示されるようにする
-        let rootView = AsyncFullImageView(url: url).ignoresSafeArea()
-        let newHostingController = NSHostingController(rootView: rootView)
+        let newHostingController = NSHostingController(rootView: AnyView(AsyncFullImageView(url: url).ignoresSafeArea()))
 
         addChild(newHostingController)
         newHostingController.view.translatesAutoresizingMaskIntoConstraints = false
