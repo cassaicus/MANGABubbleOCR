@@ -42,6 +42,12 @@ struct ContentView: View {
                                     AsyncImageView(url: model.pages[index].sourceURL, maxSize: 200)
                                         .frame(height: 200) // 高さを200ポイントに固定します。
                                         .clipped() // フレーム外にはみ出した部分を切り取ります。
+                                        .overlay(
+                                             // 現在選択中の画像に青い枠を表示します。
+                                             RoundedRectangle(cornerRadius: 4)
+                                                 .stroke(Color.blue, lineWidth: 4)
+                                                 .opacity(index == model.currentIndex ? 1 : 0)
+                                         )
                                 }
                                 // ボタンのスタイルを、装飾のないシンプルなものに設定します。
                                 .buttonStyle(PlainButtonStyle())
