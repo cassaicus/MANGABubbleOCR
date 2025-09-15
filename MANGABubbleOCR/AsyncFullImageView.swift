@@ -6,6 +6,12 @@ struct AsyncFullImageView: View {
 
     @State private var image: NSImage?
 
+    init(url: URL) {
+        self.url = url
+        // ビューが再生成された際のちらつきを防ぐため、同期的にキャッシュを確認
+        self._image = State(initialValue: ImageCache.shared.image(for: url))
+    }
+
     var body: some View {
         Group {
             if let image = image {
@@ -13,13 +19,12 @@ struct AsyncFullImageView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
-                // 画像読み込み中はインジケーターを表示
+                // キャッシュにない場合のみ、非同期読み込みを実行
                 ProgressView()
+                    .task {
+                        await loadImage()
+                    }
             }
-        }
-        .task(id: url) { // urlが変わるたびにタスクを再実行
-            // .taskモディファイア内で非同期に画像を読み込む
-            await loadImage()
         }
     }
 

@@ -39,7 +39,7 @@ struct ContentView: View {
                                     showThumbnails = false
                                 }) {
                                     // AsyncImageViewを使用してサムネイルを非同期に読み込み、表示します。
-                                    AsyncImageView(url: model.images[index])
+                                    AsyncImageView(url: model.images[index], maxSize: 200)
                                         .frame(height: 200) // 高さを200ポイントに固定します。
                                         .clipped() // フレーム外にはみ出した部分を切り取ります。
                                 }

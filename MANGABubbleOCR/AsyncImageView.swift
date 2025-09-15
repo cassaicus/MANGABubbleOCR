@@ -2,8 +2,22 @@ import SwiftUI
 
 struct AsyncImageView: View {
     let url: URL
+    let maxSize: CGFloat
 
     @State private var image: NSImage?
+
+    init(url: URL, maxSize: CGFloat = 200) {
+        self.url = url
+        self.maxSize = maxSize
+
+        // サムネイル用にユニークなキャッシュキーを生成
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "thumbnail_size", value: "\(maxSize)")]
+        let thumbKey = components.url!
+
+        // ビューが再生成された際のちらつきを防ぐため、同期的にキャッシュを確認
+        self._image = State(initialValue: ImageCache.shared.image(for: thumbKey))
+    }
 
     var body: some View {
         Group {
@@ -12,23 +26,18 @@ struct AsyncImageView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
-                // 画像読み込み中はインジケーターを表示
+                // キャッシュにない場合のみ、非同期読み込みを実行
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.gray.opacity(0.1))
+                    .task {
+                        await loadImage()
+                    }
             }
-        }
-        .task {
-            // .taskモディファイア内で非同期に画像を読み込む
-            await loadImage()
         }
     }
 
     private func loadImage() async {
-        // すでに画像があれば何もしない
-        guard image == nil else { return }
-
-        // ImageCacheからサムネイルを非同期で取得
-        self.image = await ImageCache.shared.thumbnail(for: url)
+        self.image = await ImageCache.shared.thumbnail(for: url, maxSize: maxSize)
     }
 }
