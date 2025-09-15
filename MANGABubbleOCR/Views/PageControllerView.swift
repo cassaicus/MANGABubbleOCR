@@ -116,11 +116,21 @@ class ImagePageViewController: NSViewController {
         hostingController?.removeFromParent()
 
         // AsyncFullImageViewをホストする新しいNSHostingControllerを作成
-        let newHostingController = NSHostingController(rootView: AnyView(AsyncFullImageView(url: url)))
+        // ここで .ignoresSafeArea() を追加して、タイトルバー領域にも表示されるようにする
+        let rootView = AsyncFullImageView(url: url).ignoresSafeArea()
+        let newHostingController = NSHostingController(rootView: rootView)
+
         addChild(newHostingController)
-        newHostingController.view.frame = self.view.bounds
-        newHostingController.view.autoresizingMask = [.width, .height]
+        newHostingController.view.translatesAutoresizingMaskIntoConstraints = false
         self.view.addSubview(newHostingController.view)
         self.hostingController = newHostingController
+
+        // Auto Layout を使って、ホスティングビューが親ビュー全体を埋めるように制約を設定
+        NSLayoutConstraint.activate([
+            newHostingController.view.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            newHostingController.view.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+            newHostingController.view.topAnchor.constraint(equalTo: self.view.topAnchor),
+            newHostingController.view.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
+        ])
     }
 }
