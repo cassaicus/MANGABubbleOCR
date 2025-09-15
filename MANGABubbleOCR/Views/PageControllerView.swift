@@ -118,15 +118,9 @@ class ImagePageViewController: NSViewController {
         // AsyncFullImageViewをホストする新しいNSHostingControllerを作成
         let newHostingController = NSHostingController(rootView: AnyView(AsyncFullImageView(url: url)))
         addChild(newHostingController)
-        newHostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        newHostingController.view.frame = self.view.bounds
+        newHostingController.view.autoresizingMask = [.width, .height]
         self.view.addSubview(newHostingController.view)
         self.hostingController = newHostingController
-
-        NSLayoutConstraint.activate([
-            newHostingController.view.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
-            newHostingController.view.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
-            newHostingController.view.topAnchor.constraint(equalTo: self.view.topAnchor),
-            newHostingController.view.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
-        ])
     }
 }
