@@ -38,16 +38,16 @@ class PageController: NSPageController, NSPageControllerDelegate {
         delegate = self
         // ページのトランジション（切り替え）スタイルを水平ストリップに設定します。
         transitionStyle = .horizontalStrip
-        // 表示するオブジェクトの配列をモデルの画像URL配列に設定します。モデルがnilの場合は空配列を設定します。
-        arrangedObjects = model?.images ?? []
+        // 表示するオブジェクトの配列をモデルのページ配列に設定します。
+        arrangedObjects = model?.pages ?? []
         // 初期表示されるページのインデックスをモデルの現在のインデックスに設定します。
         selectedIndex = model?.currentIndex ?? 0
     }
     
     // 外部からデータを再読み込みするために呼び出されるメソッド。
     func reloadData() {
-        // 表示するオブジェクトの配列を最新の画像URL配列に更新します。
-        arrangedObjects = model?.images ?? []
+        // 表示するオブジェクトの配列を最新のページ配列に更新します。
+        arrangedObjects = model?.pages ?? []
         // 表示ページのインデックスを最新の現在のインデックスに更新します。
         selectedIndex = model?.currentIndex ?? 0
     }
@@ -66,11 +66,11 @@ class PageController: NSPageController, NSPageControllerDelegate {
     
     // ビューコントローラーが表示される直前に呼び出され、ビューコントローラーの準備を行うデリゲートメソッド。
     func pageController(_ pageController: NSPageController, prepare viewController: NSViewController, with object: Any?) {
-        // viewControllerをImagePageViewControllerに、objectをURLにキャストできるか確認します。
+        // viewControllerをImagePageViewControllerに、objectをMangaPageにキャストできるか確認します。
         guard let vc = viewController as? ImagePageViewController,
-              let url = object as? URL else { return }
+              let page = object as? MangaPage else { return }
         // キャストが成功した場合、ビューコントローラーに表示する画像のURLを設定します。
-        vc.imageURL = url
+        vc.imageURL = page.sourceURL
     }
     
     // ページのトランジションアニメーションが完了した後に呼び出されるデリゲートメソッド。

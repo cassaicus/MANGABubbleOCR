@@ -16,8 +16,8 @@ struct ContentView: View {
             // 背景を黒色に設定し、セーフエリアを無視して全画面に広げます。
             Color.black.ignoresSafeArea()
             
-            // 表示する画像がまだ読み込まれていない場合の処理。
-            if model.images.isEmpty {
+            // 表示するページがまだ読み込まれていない場合の処理。
+            if model.pages.isEmpty {
                 // ユーザーにフォルダ選択を促すテキストを表示します。
                 Text("フォルダを選んで jpg を読み込んでください")
                     .foregroundColor(.white) // テキストの色を白に設定します。
@@ -29,8 +29,8 @@ struct ContentView: View {
                     ScrollView {
                         // LazyVGridを使用して、5列のグリッドレイアウトを作成します。
                         LazyVGrid(columns: Array(repeating: .init(.flexible(), spacing: 10), count: 5), spacing: 10) {
-                            // 画像のインデックスをループ処理します。
-                            ForEach(model.images.indices, id: \.self) { index in
+                            // ページのインデックスをループ処理します。
+                            ForEach(model.pages.indices, id: \.self) { index in
                                 // ボタンとして画像を表示します。
                                 Button(action: {
                                     // ボタンがタップされたら、モデルの現在のインデックスを更新します。
@@ -39,7 +39,7 @@ struct ContentView: View {
                                     showThumbnails = false
                                 }) {
                                     // AsyncImageViewを使用してサムネイルを非同期に読み込み、表示します。
-                                    AsyncImageView(url: model.images[index], maxSize: 200)
+                                    AsyncImageView(url: model.pages[index].sourceURL, maxSize: 200)
                                         .frame(height: 200) // 高さを200ポイントに固定します。
                                         .clipped() // フレーム外にはみ出した部分を切り取ります。
                                 }
@@ -66,8 +66,8 @@ struct ContentView: View {
                     Spacer()
                     
                     VStack{
-                        // 画像が読み込まれている場合のみ、サムネイルボタンを表示します。
-                        if !model.images.isEmpty {
+                        // ページが読み込まれている場合のみ、サムネイルボタンを表示します。
+                        if !model.pages.isEmpty {
                             // サムネイル表示と1枚表示を切り替えるためのボタン。
                             Button(showThumbnails ? "1枚表示" : "サムネイル") {
                                 // ボタンがタップされたらshowThumbnailsの値を反転させます。
