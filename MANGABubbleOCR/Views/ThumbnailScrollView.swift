@@ -61,6 +61,14 @@ struct ThumbnailScrollView: View {
                     // グリッド全体の周囲に余白を追加
                     .padding()
                 }
+                // .onChangeモディファイアを追加
+                // `model.pages`配列への変更を監視します
+                .onChange(of: model.pages) {
+                    // 配列が変更された（＝新しいフォルダが読み込まれた）場合、
+                    // ScrollViewReaderのproxyを使ってリストの先頭（IDが0のアイテム）にスクロールします。
+                    // `anchor: .top`で、アイテムがビューの最上部に配置されるようにします。
+                    proxy.scrollTo(0, anchor: .top)
+                }
             }
             // このビュー（ScrollView）が表示されたときに実行される処理
             .onAppear {
