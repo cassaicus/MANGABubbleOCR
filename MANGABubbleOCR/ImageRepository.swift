@@ -81,21 +81,6 @@ final class ImageRepository {
         }
     }
     
-    // MARK: - サムネイル生成（キャッシュする）
-    func thumbnail(for url: URL, maxPixelSize: Int = 400) -> NSImage? {
-        if let cached = thumbCache.object(forKey: url as NSURL) { return cached }
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [NSString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true
-        ]
-        guard let cgThumb = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary) else { return nil }
-        let ns = NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width, height: cgThumb.height))
-        thumbCache.setObject(ns, forKey: url as NSURL)
-        return ns
-    }
-    
     // MARK: - ディレクトリ監視（簡易）
     func startMonitoring(folder: URL, callback: @escaping () -> Void) {
         stopMonitoring()

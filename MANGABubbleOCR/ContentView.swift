@@ -31,25 +31,20 @@ struct ContentView: View {
                         LazyVGrid(columns: Array(repeating: .init(.flexible(), spacing: 10), count: 5), spacing: 10) {
                             // 画像のインデックスをループ処理します。
                             ForEach(model.images.indices, id: \.self) { index in
-                                // URLからNSImageを正常に読み込めた場合の処理。
-                                if let image = model.thumbnail(for: model.images[index]) {
-                                    // ボタンとして画像を表示します。
-                                    Button(action: {
-                                        // ボタンがタップされたら、モデルの現在のインデックスを更新します。
-                                        model.currentIndex = index
-                                        // 1枚表示モードに切り替えます。
-                                        showThumbnails = false
-                                    }) {
-                                        // NSImageをSwiftUIのImageに変換して表示します。
-                                        Image(nsImage: image)
-                                            .resizable() // 画像のリサイズを可能にします。
-                                            .aspectRatio(contentMode: .fit) // アスペクト比を維持してフィットさせます。
-                                            .frame(height: 200) // 高さを200ポイントに固定します。
-                                            .clipped() // フレーム外にはみ出した部分を切り取ります。
-                                    }
-                                    // ボタンのスタイルを、装飾のないシンプルなものに設定します。
-                                    .buttonStyle(PlainButtonStyle())
+                                // ボタンとして画像を表示します。
+                                Button(action: {
+                                    // ボタンがタップされたら、モデルの現在のインデックスを更新します。
+                                    model.currentIndex = index
+                                    // 1枚表示モードに切り替えます。
+                                    showThumbnails = false
+                                }) {
+                                    // AsyncImageViewを使用してサムネイルを非同期に読み込み、表示します。
+                                    AsyncImageView(url: model.images[index])
+                                        .frame(height: 200) // 高さを200ポイントに固定します。
+                                        .clipped() // フレーム外にはみ出した部分を切り取ります。
                                 }
+                                // ボタンのスタイルを、装飾のないシンプルなものに設定します。
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
                         .padding() // グリッドの周りに余白を追加します。

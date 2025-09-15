@@ -39,8 +39,4 @@ class ImageViewerModel: ObservableObject {
             }
         }
     }
-    // サムネを表示したいとき
-    func thumbnail(for url: URL) -> NSImage? {
-        ImageRepository.shared.thumbnail(for: url, maxPixelSize: 200)
-    }
 }
