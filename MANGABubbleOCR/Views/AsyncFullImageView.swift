@@ -13,7 +13,7 @@ struct AsyncFullImageView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
             if let image = image {
                 Image(nsImage: image)
                     .resizable()
@@ -26,6 +26,7 @@ struct AsyncFullImageView: View {
                     }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func loadImage() async {
