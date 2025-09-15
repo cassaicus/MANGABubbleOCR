@@ -190,7 +190,7 @@ class ImageViewerModel: ObservableObject {
                         print("Saved cropped image to: \(fileURL.path)")
 
                         // OCR実行
-                        runOCR(on: croppedCGImage, bubbleID: bubbleID)
+                        self.runOCR(on: croppedCGImage, bubbleID: bubbleID)
 
                     } catch {
                         print("Failed to save cropped image: \(error)")
