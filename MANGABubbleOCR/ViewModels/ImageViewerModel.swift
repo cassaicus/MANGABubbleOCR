@@ -278,42 +278,63 @@ class ImageViewerModel: ObservableObject {
     /// セカンダリ手法で再試行します。2回目の試行も失敗した場合、切り出された画像はデバッグのために
     /// 一時ディレクトリに保存されます。
     private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, with bubbleID: UUID, completion: @escaping () -> Void) {
-        // OCR is computationally expensive, so it's run on a background thread.
-        // OCRは計算コストが高いため、バックグラウンドスレッドで実行します。
         DispatchQueue.global(qos: .userInitiated).async {
-            var ocrResult: (text: String, identifier: String)
             
-            do {
-                // 1. First attempt with the primary normalization.
-                // 1. プライマリ正規化で最初の試行。
-                let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+            // Pre-process the image by trimming whitespace to improve OCR accuracy.
+            // OCR精度を向上させるため、余白をトリミングして画像を前処理します。
+            let trimmedImage = cgImage.trimmingWhitespace()
 
-                if text.isEmpty {
-                    throw OCREngineError.unexpectedModelOutput
-                }
-                ocrResult = (text, Constants.ocrEngineIdentifier)
-            } catch {
-                print("OCR failed or returned empty with primary normalization, retrying... Error: \(error)")
+            // Helper to perform a single OCR attempt and return a Result.
+            // 単一のOCR試行を実行し、Resultを返すヘルパー。
+            let performOcrOnce = { (normalization: NormalizationType) -> Result<String, Error> in
                 do {
-                    // 2. Second attempt with the fallback normalization.
-                    // 2. フォールバック正規化で2回目の試行。
-                    let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                    let text = try self.ocrEngine.recognizeText(from: trimmedImage, normalization: normalization)
                     if text.isEmpty {
-                        throw OCREngineError.unexpectedModelOutput
+                        // Treat empty string as a failure to trigger retry.
+                        // 空文字列を失敗として扱い、再試行をトリガーする。
+                        return .failure(OCREngineError.unexpectedModelOutput)
                     }
-                    ocrResult = (text, Constants.ocrEngineIdentifierRetry)
+                    return .success(text)
                 } catch {
-                    print("OCR failed with secondary normalization. Error: \(error)")
-                    ocrResult = ("[\(error.localizedDescription)]", Constants.ocrFailureIdentifier)
-
-                    // On final failure, save the problematic image for debugging.
-                    // 最終的な失敗時に、問題の画像をデバッグ用に保存します。
-                    self.saveFailedOCRImage(cgImage, for: bubbleID)
+                    return .failure(error)
                 }
             }
 
-            // 3. Update the Core Data object on its own context's queue.
-            // 3. Core Dataオブジェクトを自身のコンテキストキューで更新します。
+            var ocrResult: (text: String, identifier: String)
+
+            // 1. First attempt
+            // 1. 最初の試行
+            let firstAttemptResult = performOcrOnce(.scaleTo_minus1_1)
+
+            switch firstAttemptResult {
+            case .success(let text):
+                // First attempt succeeded.
+                // 最初の試行が成功。
+                ocrResult = (text, Constants.ocrEngineIdentifier)
+
+            case .failure(let error):
+                // First attempt failed, try second attempt.
+                // 最初の試行が失敗、2回目の試行へ。
+                print("OCR failed or returned empty with primary normalization, retrying... Error: \(error.localizedDescription)")
+                let secondAttemptResult = performOcrOnce(.scaleTo_0_1)
+
+                switch secondAttemptResult {
+                case .success(let text):
+                    // Second attempt succeeded.
+                    // 2回目の試行が成功。
+                    ocrResult = (text, Constants.ocrEngineIdentifierRetry)
+
+                case .failure(let secondError):
+                    // Second attempt also failed.
+                    // 2回目の試行も失敗。
+                    print("OCR failed with secondary normalization. Error: \(secondError.localizedDescription)")
+                    ocrResult = ("[\(secondError.localizedDescription)]", Constants.ocrFailureIdentifier)
+                    self.saveFailedOCRImage(trimmedImage, for: bubbleID)
+                }
+            }
+
+            // Update Core Data on the correct queue.
+            // 正しいキューでCore Dataを更新。
             self.viewContext.perform {
                 self.updateBubble(bubbleObjectID, with: ocrResult)
                 completion()

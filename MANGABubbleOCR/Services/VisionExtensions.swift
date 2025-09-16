@@ -49,4 +49,69 @@ extension CGImage {
             throw NSError(domain: "ImageSaveError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize image."])
         }
     }
+
+    /// 画像の透明な余白をトリミングします。
+    ///
+    /// このメソッドは、画像のピクセルデータをスキャンして、完全に透明ではない最初のピクセルと
+    /// 最後のピクセルを見つけ出し、その領域を囲む新しい画像を返します。
+    /// もし画像が完全に透明であるか、処理に失敗した場合は、元の画像を返します。
+    /// - Returns: トリミングされた新しい `CGImage`、または元の画像。
+    func trimmingWhitespace() -> CGImage {
+        // 1. 画像のピクセルデータにアクセスするためのビットマップコンテキストを作成します。
+        guard let context = CGContext(
+            data: nil,
+            width: self.width,
+            height: self.height,
+            bitsPerComponent: 8,
+            bytesPerRow: self.width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            // コンテキストが作成できない場合は、安全のために元の画像を返します。
+            return self
+        }
+
+        // コンテキストに画像をレンダリングします。
+        context.draw(self, in: CGRect(x: 0, y: 0, width: self.width, height: self.height))
+
+        // 2. ピクセルデータのバッファへのポインタを取得します。
+        // 各ピクセルは32ビット（RGBA）で表されます。
+        guard let data = context.data?.bindMemory(to: UInt32.self, capacity: self.width * self.height) else {
+            return self
+        }
+
+        // 3. 不透明なピクセルが含まれる領域（バウンディングボックス）を見つけます。
+        var minX = self.width
+        var minY = self.height
+        var maxX = -1
+        var maxY = -1
+
+        for y in 0 ..< self.height {
+            for x in 0 ..< self.width {
+                // ピクセルのアルファ値を取得します。
+                // RGBAフォーマットなので、アルファ値は最上位バイトにあります。
+                let alpha = (data[y * self.width + x] >> 24) & 0xFF
+
+                // 4. アルファ値が0より大きい（完全に透明ではない）場合、
+                // バウンディングボックスを更新します。
+                if alpha > 0 {
+                    if x < minX { minX = x }
+                    if x > maxX { maxX = x }
+                    if y < minY { minY = y }
+                    if y > maxY { maxY = y }
+                }
+            }
+        }
+
+        // 5. 不透明なピクセルが見つかった場合のみ、画像をクロップします。
+        if maxX > minX && maxY > minY {
+            let cropRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+            // `cropping(to:)` は失敗する可能性があるため、オプショナルを返します。
+            // 失敗した場合は、安全のために元の画像を返します。
+            return self.cropping(to: cropRect) ?? self
+        } else {
+            // 画像が完全に透明か、何も見つからなかった場合は、元の画像を返します。
+            return self
+        }
+    }
 }
