@@ -283,8 +283,10 @@ class ImageViewerModel: ObservableObject {
                 // Perform OCR, with a single retry for empty results using a different normalization.
                 // 異なる正規化を用いて、結果が空の場合に1回だけ再試行します。
                 var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                var isRetryAttempt = false
 
                 if text.isEmpty {
+                    isRetryAttempt = true
                     // The model succeeded but returned no text. Retry once after cropping the image.
                     // モデルは成功したがテキストを返さなかった。画像を切り抜いてから再試行を1回行います。
                     let inset: CGFloat = 2
@@ -304,11 +306,19 @@ class ImageViewerModel: ObservableObject {
                     }
                 }
 
-                // Per user instruction, an empty string result (even after a retry) is considered a success, not a failure.
-                // The failure case is handled by the catch block.
-                // ユーザーの指示により、空の文字列結果（再試行後も同様）は失敗ではなく成功と見なされます。
-                // 失敗ケースはcatchブロックで処理されます。
-                ocrResult = (text, Constants.ocrEngineIdentifier)
+                // After all attempts, check if the text is still empty.
+                // 全ての試行が終わった後、テキストがまだ空か確認します。
+                if isRetryAttempt && text.isEmpty {
+                    // If the retry also resulted in an empty string, treat it as a failure.
+                    // 再試行でも結果が空文字列だった場合、失敗として扱います。
+                    print("OCR returned an empty string on the second attempt for bubble \(bubbleID).")
+                    ocrResult = ("", Constants.ocrFailureIdentifier)
+                    self.saveFailedOCRImage(cgImage, for: bubbleID)
+                } else {
+                    // Otherwise, it's a success.
+                    // それ以外の場合は成功です。
+                    ocrResult = (text, Constants.ocrEngineIdentifier)
+                }
 
             } catch {
                 // The OCR attempt itself failed (e.g., predictionError).
