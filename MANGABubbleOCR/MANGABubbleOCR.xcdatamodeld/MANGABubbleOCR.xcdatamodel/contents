@@ -9,6 +9,13 @@
     <entity name="BubbleEntity" representedClassName="BubbleEntity" syncable="YES" codeGenerationType="class">
         <attribute name="bubbleID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="height" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="manualOcrText" optional="YES" attributeType="String"/>
+        <attribute name="ocrConfidence" optional="YES" attributeType="Float" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="ocrEngineIdentifier" optional="YES" attributeType="String"/>
+        <attribute name="ocrStatus" optional="YES" attributeType="String"/>
+        <attribute name="ocrText" optional="YES" attributeType="String"/>
+        <attribute name="ocrTimestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="shouldOcr" optional="YES" attributeType="Boolean" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="width" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="x" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="y" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
