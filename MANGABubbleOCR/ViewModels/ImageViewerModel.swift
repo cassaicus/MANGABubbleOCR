@@ -62,7 +62,6 @@ class ImageViewerModel: ObservableObject {
         static let bubbleDetectorModelName = "best"
         static let bubbleDetectorModelExtension = "mlmodelc"
         static let ocrEngineIdentifier = "MangaOCR-v1.0"
-        static let ocrEngineIdentifierRetry = "MangaOCR-v1.0-retry"
         static let ocrFailureIdentifier = "failure"
         static let failedOCRSamplesDirectory = "failed_ocr_samples"
     }
@@ -271,64 +270,28 @@ class ImageViewerModel: ObservableObject {
     /// Performs OCR on a single cropped image and updates the corresponding `BubbleEntity`.
     /// 切り出された単一の画像に対してOCRを実行し、対応する`BubbleEntity`を更新します。
     ///
-    /// This method includes a retry mechanism: if OCR fails with the primary normalization
-    /// method or returns an empty result, it attempts again with a secondary method.
-    /// If the second attempt also fails, the cropped image is saved to a temporary directory for debugging.
-    /// このメソッドは再試行メカニズムを含みます：プライマリ正規化手法でOCRが失敗した、または空の結果を返した場合、
-    /// セカンダリ手法で再試行します。2回目の試行も失敗した場合、切り出された画像はデバッグのために
-    /// 一時ディレクトリに保存されます。
+    /// NOTE FOR DEBUGGING: The retry logic has been temporarily removed to isolate the cause of the `predictionError`.
+    /// Only one normalization method (`scaleTo_minus1_1`) is currently being used.
+    /// デバッグ注記：`predictionError`の原因を特定するため、再試行ロジックは一時的に削除されています。
+    /// 現在、単一の正規化手法（`scaleTo_minus1_1`）のみが使用されています。
     private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, with bubbleID: UUID, completion: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            
-            // Helper to perform a single OCR attempt and return a Result.
-            // 単一のOCR試行を実行し、Resultを返すヘルパー。
-            let performOcrOnce = { (normalization: NormalizationType) -> Result<String, Error> in
-                do {
-                    // Use the original image directly without cropping.
-                    // クロップせずに元の画像を直接使用します。
-                    let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: normalization)
-                    if text.isEmpty {
-                        // Treat empty string as a failure to trigger retry.
-                        // 空文字列を失敗として扱い、再試行をトリガーする。
-                        return .failure(OCREngineError.unexpectedModelOutput)
-                    }
-                    return .success(text)
-                } catch {
-                    return .failure(error)
-                }
-            }
 
             var ocrResult: (text: String, identifier: String)
 
-            // 1. First attempt
-            // 1. 最初の試行
-            let firstAttemptResult = performOcrOnce(.scaleTo_minus1_1)
-
-            switch firstAttemptResult {
-            case .success(let text):
-                // First attempt succeeded.
-                // 最初の試行が成功。
-                ocrResult = (text, Constants.ocrEngineIdentifier)
-
-            case .failure(let error):
-                // First attempt failed, try second attempt.
-                // 最初の試行が失敗、2回目の試行へ。
-                print("OCR failed or returned empty with primary normalization, retrying... Error: \(error.localizedDescription)")
-                let secondAttemptResult = performOcrOnce(.scaleTo_0_1)
-
-                switch secondAttemptResult {
-                case .success(let text):
-                    // Second attempt succeeded.
-                    // 2回目の試行が成功。
-                    ocrResult = (text, Constants.ocrEngineIdentifierRetry)
-
-                case .failure(let secondError):
-                    // Second attempt also failed.
-                    // 2回目の試行も失敗。
-                    print("OCR failed with secondary normalization. Error: \(secondError.localizedDescription)")
-                    ocrResult = ("[\(secondError.localizedDescription)]", Constants.ocrFailureIdentifier)
+            do {
+                let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+                if text.isEmpty {
+                    print("OCR returned an empty string for bubble \(bubbleID).")
+                    ocrResult = ("", Constants.ocrFailureIdentifier)
                     self.saveFailedOCRImage(cgImage, for: bubbleID)
+                } else {
+                    ocrResult = (text, Constants.ocrEngineIdentifier)
                 }
+            } catch {
+                print("OCR failed with error: \(error.localizedDescription)")
+                ocrResult = ("[\(error.localizedDescription)]", Constants.ocrFailureIdentifier)
+                self.saveFailedOCRImage(cgImage, for: bubbleID)
             }
 
             // Update Core Data on the correct queue.
@@ -349,7 +312,7 @@ class ImageViewerModel: ObservableObject {
             return
         }
 
-        let isSuccess = result.identifier != Constants.ocrFailureIdentifier && !result.text.isEmpty
+        let isSuccess = result.identifier != Constants.ocrFailureIdentifier
 
         bubble.ocrText = result.text
         bubble.ocrTimestamp = Date()
