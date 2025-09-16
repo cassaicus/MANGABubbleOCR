@@ -64,6 +64,11 @@ class ImageViewerModel: ObservableObject {
         static let ocrEngineIdentifier = "MangaOCR-v1.0"
         static let ocrFailureIdentifier = "failure"
         static let failedOCRSamplesDirectory = "failed_ocr_samples"
+
+        // OCR retry logic settings
+        static let ocrRetryCropInset: CGFloat = 6.0
+        static let ocrInitialNormalization = OCREngine.Normalization.scaleTo_0_1
+        static let ocrRetryNormalization = OCREngine.Normalization.scaleTo_minus1_1
     }
 
     // MARK: - Initialization
@@ -280,16 +285,16 @@ class ImageViewerModel: ObservableObject {
             var ocrResult: (text: String, identifier: String)
 
             do {
-                // Perform OCR, with a single retry for empty results using a different normalization.
-                // 異なる正規化を用いて、結果が空の場合に1回だけ再試行します。
-                var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                // Perform OCR, with a single retry for empty results using configured settings.
+                // 設定された値を用いて、結果が空の場合に1回だけ再試行します。
+                var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: Constants.ocrInitialNormalization)
                 var isRetryAttempt = false
 
                 if text.isEmpty {
                     isRetryAttempt = true
                     // The model succeeded but returned no text. Retry once after cropping the image.
                     // モデルは成功したがテキストを返さなかった。画像を切り抜いてから再試行を1回行います。
-                    let inset: CGFloat = 2
+                    let inset = Constants.ocrRetryCropInset
                     // Ensure the image is large enough to be cropped.
                     // 画像が切り抜けるだけの大きさか確認します。
                     if cgImage.width > Int(inset * 2) && cgImage.height > Int(inset * 2) {
@@ -301,7 +306,7 @@ class ImageViewerModel: ObservableObject {
                         if let croppedImage = cgImage.cropping(to: cropRect) {
                             // Perform the second OCR attempt on the cropped image.
                             // 切り抜いた画像で2回目のOCRを試みます。
-                            text = try self.ocrEngine.recognizeText(from: croppedImage, normalization: .scaleTo_minus1_1)
+                            text = try self.ocrEngine.recognizeText(from: croppedImage, normalization: Constants.ocrRetryNormalization)
                         }
                     }
                 }
