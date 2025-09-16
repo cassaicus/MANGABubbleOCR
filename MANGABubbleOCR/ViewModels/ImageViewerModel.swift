@@ -280,15 +280,13 @@ class ImageViewerModel: ObservableObject {
     private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, with bubbleID: UUID, completion: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             
-            // Pre-process the image by cropping 2 pixels from each side to improve OCR accuracy.
-            // OCR精度を向上させるため、各辺から2ピクセルをクロップして画像を前処理します。
-            let croppedImage = cgImage.cropping(by: 2)
-
             // Helper to perform a single OCR attempt and return a Result.
             // 単一のOCR試行を実行し、Resultを返すヘルパー。
             let performOcrOnce = { (normalization: NormalizationType) -> Result<String, Error> in
                 do {
-                    let text = try self.ocrEngine.recognizeText(from: croppedImage, normalization: normalization)
+                    // Use the original image directly without cropping.
+                    // クロップせずに元の画像を直接使用します。
+                    let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: normalization)
                     if text.isEmpty {
                         // Treat empty string as a failure to trigger retry.
                         // 空文字列を失敗として扱い、再試行をトリガーする。
@@ -329,7 +327,7 @@ class ImageViewerModel: ObservableObject {
                     // 2回目の試行も失敗。
                     print("OCR failed with secondary normalization. Error: \(secondError.localizedDescription)")
                     ocrResult = ("[\(secondError.localizedDescription)]", Constants.ocrFailureIdentifier)
-                    self.saveFailedOCRImage(croppedImage, for: bubbleID)
+                    self.saveFailedOCRImage(cgImage, for: bubbleID)
                 }
             }
 

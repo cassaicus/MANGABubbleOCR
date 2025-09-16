@@ -50,22 +50,4 @@ extension CGImage {
         }
     }
 
-    /// 画像の端から指定されたピクセル数だけクロップ（切り取り）します。
-    /// - Parameter inset: 各辺から切り取るピクセル数。
-    /// - Returns: クロップされた新しい `CGImage`。クロップ後のサイズが0以下になる場合は元の画像を返します。
-    func cropping(by inset: CGFloat) -> CGImage {
-        let newWidth = CGFloat(self.width) - inset * 2
-        let newHeight = CGFloat(self.height) - inset * 2
-
-        // クロップ後の幅や高さが0以下にならないようにチェックします。
-        if newWidth <= 0 || newHeight <= 0 {
-            return self
-        }
-
-        let cropRect = CGRect(x: inset, y: inset, width: newWidth, height: newHeight)
-
-        // `cropping(to:)` は失敗する可能性があるため、オプショナルを返します。
-        // 失敗した場合は、安全のために元の画像を返します。
-        return self.cropping(to: cropRect) ?? self
-    }
 }
