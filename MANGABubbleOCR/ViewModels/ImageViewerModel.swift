@@ -280,18 +280,28 @@ class ImageViewerModel: ObservableObject {
             var ocrResult: (text: String, identifier: String)
 
             do {
-                // Perform OCR, with a single retry for empty results.
-                // OCRを実行し、結果が空の場合は1回だけ再試行します。
-                var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+                // Perform OCR, with a single retry for empty results using a different normalization.
+                // 異なる正規化を用いて、結果が空の場合に1回だけ再試行します。
+                var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
 
                 if text.isEmpty {
-                    // The model succeeded but returned no text. Retry once.
-                    // モデルは成功したがテキストを返さなかった。再試行を1回行います。
-                    print("OCR returned an empty string for bubble \(bubbleID). Retrying...")
-                    // The user confirmed that a second call with the same parameters is desired for now.
-                    // The potential crash mentioned in the function comment is being disregarded as per user instruction.
-                    text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
-                    print("Second OCR attempt for bubble \(bubbleID).")
+                    // The model succeeded but returned no text. Retry once after cropping the image.
+                    // モデルは成功したがテキストを返さなかった。画像を切り抜いてから再試行を1回行います。
+                    let inset: CGFloat = 2
+                    // Ensure the image is large enough to be cropped.
+                    // 画像が切り抜けるだけの大きさか確認します。
+                    if cgImage.width > Int(inset * 2) && cgImage.height > Int(inset * 2) {
+                        let cropRect = CGRect(x: inset,
+                                              y: inset,
+                                              width: CGFloat(cgImage.width) - inset * 2,
+                                              height: CGFloat(cgImage.height) - inset * 2)
+
+                        if let croppedImage = cgImage.cropping(to: cropRect) {
+                            // Perform the second OCR attempt on the cropped image.
+                            // 切り抜いた画像で2回目のOCRを試みます。
+                            text = try self.ocrEngine.recognizeText(from: croppedImage, normalization: .scaleTo_minus1_1)
+                        }
+                    }
                 }
 
                 // Per user instruction, an empty string result (even after a retry) is considered a success, not a failure.
