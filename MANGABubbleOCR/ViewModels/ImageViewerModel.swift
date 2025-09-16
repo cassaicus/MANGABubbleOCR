@@ -280,21 +280,26 @@ class ImageViewerModel: ObservableObject {
             var ocrResult: (text: String, identifier: String)
 
             do {
-                // Perform a single, stable OCR attempt.
-                // 安定した単一のOCR試行を実行します。
-                let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+                // Perform OCR, with a single retry for empty results.
+                // OCRを実行し、結果が空の場合は1回だけ再試行します。
+                var text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
 
                 if text.isEmpty {
-                    // The model succeeded but returned no text. Treat as failure.
-                    // モデルは成功したがテキストを返さなかった。失敗として扱います。
-                    print("OCR returned an empty string for bubble \(bubbleID).")
-                    ocrResult = ("", Constants.ocrFailureIdentifier)
-                    self.saveFailedOCRImage(cgImage, for: bubbleID)
-                } else {
-                    // Success.
-                    // 成功。
-                    ocrResult = (text, Constants.ocrEngineIdentifier)
+                    // The model succeeded but returned no text. Retry once.
+                    // モデルは成功したがテキストを返さなかった。再試行を1回行います。
+                    print("OCR returned an empty string for bubble \(bubbleID). Retrying...")
+                    // The user confirmed that a second call with the same parameters is desired for now.
+                    // The potential crash mentioned in the function comment is being disregarded as per user instruction.
+                    text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+                    print("Second OCR attempt for bubble \(bubbleID).")
                 }
+
+                // Per user instruction, an empty string result (even after a retry) is considered a success, not a failure.
+                // The failure case is handled by the catch block.
+                // ユーザーの指示により、空の文字列結果（再試行後も同様）は失敗ではなく成功と見なされます。
+                // 失敗ケースはcatchブロックで処理されます。
+                ocrResult = (text, Constants.ocrEngineIdentifier)
+
             } catch {
                 // The OCR attempt itself failed (e.g., predictionError).
                 // OCR試行自体が失敗した（例：predictionError）。
