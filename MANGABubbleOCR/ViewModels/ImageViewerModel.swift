@@ -67,8 +67,8 @@ class ImageViewerModel: ObservableObject {
 
         // OCR retry logic settings
         static let ocrRetryCropInset: CGFloat = 6.0
-        static let ocrInitialNormalization = OCREngine.Normalization.scaleTo_0_1
-        static let ocrRetryNormalization = OCREngine.Normalization.scaleTo_minus1_1
+        static let ocrInitialNormalization = NormalizationType.scaleTo_0_1
+        static let ocrRetryNormalization = NormalizationType.scaleTo_minus1_1
     }
 
     // MARK: - Initialization
