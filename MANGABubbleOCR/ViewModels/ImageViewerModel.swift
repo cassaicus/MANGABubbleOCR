@@ -2,6 +2,7 @@ import SwiftUI
 import Vision
 import CoreML
 import CoreData
+import AppKit // For NSBitmapImageRep
 
 /**
  `ImageViewerModel` is the primary ViewModel that manages the application's UI state and data flow for manga viewing and analysis.
@@ -63,6 +64,7 @@ class ImageViewerModel: ObservableObject {
         static let ocrEngineIdentifier = "MangaOCR-v1.0"
         static let ocrEngineIdentifierRetry = "MangaOCR-v1.0-retry"
         static let ocrFailureIdentifier = "failure"
+        static let failedOCRSamplesDirectory = "failed_ocr_samples"
     }
 
     // MARK: - Initialization
@@ -261,7 +263,7 @@ class ImageViewerModel: ObservableObject {
         // Dispatch an asynchronous OCR task for the cropped image.
         // 切り出した画像に対して非同期のOCRタスクをディスパッチします。
         dispatchGroup.enter()
-        runOCR(on: croppedCGImage, for: newBubble.objectID) {
+        runOCR(on: croppedCGImage, for: newBubble.objectID, with: newBubble.bubbleID!) {
             dispatchGroup.leave()
         }
     }
@@ -271,9 +273,11 @@ class ImageViewerModel: ObservableObject {
     ///
     /// This method includes a retry mechanism: if OCR fails with the primary normalization
     /// method or returns an empty result, it attempts again with a secondary method.
+    /// If the second attempt also fails, the cropped image is saved to a temporary directory for debugging.
     /// このメソッドは再試行メカニズムを含みます：プライマリ正規化手法でOCRが失敗した、または空の結果を返した場合、
-    /// セカンダリ手法で再試行します。
-    private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, completion: @escaping () -> Void) {
+    /// セカンダリ手法で再試行します。2回目の試行も失敗した場合、切り出された画像はデバッグのために
+    /// 一時ディレクトリに保存されます。
+    private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, with bubbleID: UUID, completion: @escaping () -> Void) {
         // OCR is computationally expensive, so it's run on a background thread.
         // OCRは計算コストが高いため、バックグラウンドスレッドで実行します。
         DispatchQueue.global(qos: .userInitiated).async {
@@ -284,10 +288,8 @@ class ImageViewerModel: ObservableObject {
                 // 1. プライマリ正規化で最初の試行。
                 let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
 
-                // If the result is empty, treat it as a failure to trigger the retry.
-                // 結果が空の場合は、再試行をトリガーするために失敗として扱います。
                 if text.isEmpty {
-                    throw OCREngineError.unexpectedModelOutput // Use a fitting error type.
+                    throw OCREngineError.unexpectedModelOutput
                 }
                 ocrResult = (text, Constants.ocrEngineIdentifier)
             } catch {
@@ -296,10 +298,17 @@ class ImageViewerModel: ObservableObject {
                     // 2. Second attempt with the fallback normalization.
                     // 2. フォールバック正規化で2回目の試行。
                     let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                    if text.isEmpty {
+                        throw OCREngineError.unexpectedModelOutput
+                    }
                     ocrResult = (text, Constants.ocrEngineIdentifierRetry)
                 } catch {
                     print("OCR failed with secondary normalization. Error: \(error)")
                     ocrResult = ("[\(error.localizedDescription)]", Constants.ocrFailureIdentifier)
+
+                    // On final failure, save the problematic image for debugging.
+                    // 最終的な失敗時に、問題の画像をデバッグ用に保存します。
+                    self.saveFailedOCRImage(cgImage, for: bubbleID)
                 }
             }
 
@@ -384,6 +393,51 @@ class ImageViewerModel: ObservableObject {
             // Rollback to discard the failed changes.
             // 失敗した変更を破棄するためにロールバックします。
             viewContext.rollback()
+        }
+    }
+
+    // MARK: - Filesystem Helper
+
+    /// Creates a temporary directory for storing failed OCR sample images.
+    /// OCRに失敗したサンプル画像を保存するための一時ディレクトリを作成します。
+    /// - Returns: The URL of the created directory, or `nil` on failure.
+    ///   作成されたディレクトリのURL。失敗した場合は`nil`。
+    private func setupTemporaryDirectory() -> URL? {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(Constants.failedOCRSamplesDirectory)
+        do {
+            // Create directory if it doesn't exist.
+            // ディレクトリが存在しない場合は作成します。
+            if !FileManager.default.fileExists(atPath: tempDir.path) {
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+            }
+            return tempDir
+        } catch {
+            print("Failed to create temporary directory: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Saves a `CGImage` to a PNG file in the temporary directory.
+    /// `CGImage`を一時ディレクトリにPNGファイルとして保存します。
+    /// - Parameters:
+    ///   - cgImage: The image to save. / 保存する画像。
+    ///   - bubbleID: The UUID of the bubble, used for the filename. / ファイル名として使用されるフキダシのUUID。
+    private func saveFailedOCRImage(_ cgImage: CGImage, for bubbleID: UUID) {
+        guard let tempDir = setupTemporaryDirectory() else { return }
+        let fileName = "\(bubbleID).png"
+        let fileURL = tempDir.appendingPathComponent(fileName)
+
+        let rep = NSBitmapImageRep(cgImage: cgImage)
+        guard let pngData = rep.representation(using: .png, properties: [:]) else {
+            print("Failed to convert cgImage to PNG data for bubble \(bubbleID)")
+            return
+        }
+
+        do {
+            try pngData.write(to: fileURL)
+            print("Saved failed OCR sample to: \(fileURL.path)")
+        } catch {
+            print("Failed to save failed OCR sample: \(error.localizedDescription)")
         }
     }
 }
