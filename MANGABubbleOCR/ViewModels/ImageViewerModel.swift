@@ -3,58 +3,84 @@ import Vision
 import CoreML
 import CoreData
 
-/// `ImageViewerModel`は、アプリケーションのUI状態とデータフローを管理する主要なViewModelです。
-///
-/// このクラスは、表示する漫画のページ(`MangaPage`)のリスト、現在の表示インデックス、
-/// およびCore Dataとのやり取りを管理します。UIの変更をトリガーするために`@Published`プロパティを使用し、
-/// SwiftUIビューに更新を通知します。このクラスはシングルトンとして実装されており、
-/// アプリケーション全体で単一のインスタンスが共有されます。
+/**
+ `ImageViewerModel` is the primary ViewModel that manages the application's UI state and data flow for manga viewing and analysis.
+
+ This class is responsible for:
+ - Holding the list of `MangaPage` objects to be displayed.
+ - Tracking the current page index.
+ - Interacting with Core Data to persist and retrieve manga, page, and text bubble information.
+ - Orchestrating the bubble detection process using the Vision framework.
+ - Coordinating with `OCREngine` to perform text recognition on detected bubbles.
+
+ It is implemented as a singleton to provide a single, shared instance across the entire application.
+ UI updates are triggered using `@Published` properties, which notify SwiftUI views of any changes.
+*/
 class ImageViewerModel: ObservableObject {
-    /// アプリケーション全体で共有される`ImageViewerModel`のシングルトンインスタンス。
+
+    // MARK: - Singleton Instance
+
+    /// The shared singleton instance of `ImageViewerModel`.
     static let shared = ImageViewerModel()
     
-    /// Core Dataの永続化コントローラから取得した、メインスレッド用の`NSManagedObjectContext`。
-    /// データベース操作はすべてこのコンテキストを介して行われます。
-    private let viewContext = PersistenceController.shared.container.viewContext
+    // MARK: - Published Properties
 
-    /// 表示対象となる漫画の全ページを保持する配列。
-    /// `@Published`ラッパーにより、このプロパティへの変更は自動的に関連するSwiftUIビューに通知され、UIが更新されます。
+    /// The array of all manga pages currently loaded.
+    /// Changes to this array will trigger UI updates in subscribed SwiftUI views.
     @Published var pages: [MangaPage] = []
 
-    /// `pages`配列内で現在表示されているページのインデックス。
-    /// この値が変更されると、表示される画像も更新されます。
+    /// The index of the currently displayed page within the `pages` array.
     @Published var currentIndex: Int = 0
 
-    /// OCRエンジンへの参照。
-    private let ocrEngine: OCREngine?
+    // MARK: - Core Components
 
-    /// シングルトンパターンを強制するため、初期化子をプライベートに設定します。
-    /// 外部からの直接的なインスタンス化を防ぎます。
+    /// The main-thread `NSManagedObjectContext` for all Core Data operations.
+    private let viewContext = PersistenceController.shared.container.viewContext
+
+    /// A reference to the OCR engine.
+    private let ocrEngine: OCREngine
+
+    // MARK: - Constants
+
+    private enum Constants {
+        static let bubbleDetectorModelName = "best"
+        static let bubbleDetectorModelExtension = "mlmodelc"
+        static let croppedBubblesDirectory = "cropped_bubbles"
+        static let ocrEngineIdentifier = "MangaOCR-v1.0"
+        static let ocrEngineIdentifierRetry = "MangaOCR-v1.0-retry"
+    }
+
+    // MARK: - Initialization
+
+    /// Private initializer to enforce the singleton pattern.
+    ///
+    /// This attempts to initialize the `OCREngine`. If the engine fails to load
+    /// (e.g., model or vocabulary file is missing), the application will terminate
+    /// with a fatal error, as OCR is a critical feature.
     private init() {
-        // OCRエンジンを初期化します。失敗した場合はnilが設定されます。
-        self.ocrEngine = OCREngine()
-        if ocrEngine == nil {
-            print("ImageViewerModel: OCREngineの初期化に失敗しました。")
+        do {
+            self.ocrEngine = try OCREngine()
+        } catch {
+            // In a production app, you might want to handle this more gracefully,
+            // for example, by disabling OCR-related features in the UI.
+            fatalError("ImageViewerModel: Failed to initialize OCREngine. Error: \(error)")
         }
     }
 
-    /// 新しいページのリストでモデルを更新します。
-    ///
-    /// 既存のページリストを新しいもので置き換え、現在のインデックスをリセットします。
-    /// また、新しいページのサムネイルをバックグラウンドでプリフェッチするように`ThumbnailPrefetcher`に指示します。
-    /// - Parameter newPages: 表示する新しい`MangaPage`の配列。
+    // MARK: - Public Methods for Page Management
+
+    /// Updates the model with a new list of pages.
+    /// - Parameter newPages: The new array of `MangaPage` objects to display.
     func setPages(_ newPages: [MangaPage]) {
         self.pages = newPages
         self.currentIndex = 0
         let urls = newPages.map { $0.sourceURL }
+        // Start prefetching thumbnails for the new pages in the background.
         ThumbnailPrefetcher.shared.prefetchThumbnails(for: urls)
     }
 
-    /// 指定されたフォルダから画像を非同期で読み込み、ページのリストを更新します。
-    ///
-    /// `ImageRepository`を使用して指定されたフォルダ内の画像URLを取得し、
-    /// それらを`MangaPage`オブジェクトに変換して、メインスレッドでUIを更新します。
-    /// - Parameter folder: 画像ファイルが含まれるフォルダのURL。
+    /// Asynchronously loads images from a specified folder URL and updates the pages list.
+    /// - Parameter folder: The URL of the folder containing the image files.
     func loadFolder(_ folder: URL) {
         ImageRepository.shared.fetchLocalImagesAsync(from: folder) { [weak self] urls in
             let newPages = urls.map { MangaPage(sourceURL: $0) }
@@ -64,13 +90,11 @@ class ImageViewerModel: ObservableObject {
         }
     }
 
-    /// フォルダ選択ダイアログを表示し、ユーザーが選択したフォルダから画像を読み込みます。
-    ///
-    /// `NSOpenPanel`を使用してユーザーにフォルダを選択させ、選択が完了したら
-    /// `loadFolder`メソッドを呼び出して画像の読み込みを開始します。
-    /// フォルダ選択前には、進行中のサムネイルプリフェッチ処理をすべてキャンセルします。
+    /// Displays a folder selection dialog and loads the images from the chosen folder.
     func selectAndLoadFolder() {
+        // Cancel any ongoing prefetching before loading a new folder.
         ThumbnailPrefetcher.shared.cancelAll()
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -80,10 +104,9 @@ class ImageViewerModel: ObservableObject {
         }
     }
 
-    /// 現在表示されている画像からフキダシ（テキストバブル）を検出します。
-    ///
-    /// このメソッドは、現在のページの画像を非同期で取得し、Visionフレームワークと
-    /// Core MLモデルを使用してフキダシの位置を検出する一連の処理を開始します。
+    // MARK: - Bubble Analysis and OCR Orchestration
+
+    /// Initiates the text bubble analysis for the currently displayed image.
     func analyzeCurrentImageForTextBubbles() {
         guard currentIndex < pages.count else { return }
         let currentPage = pages[currentIndex]
@@ -93,246 +116,211 @@ class ImageViewerModel: ObservableObject {
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
                   let cgImage = nsImage.cgImage(),
                   let imageData = nsImage.tiffRepresentation else {
-                print("Failed to load image or convert to data.")
+                print("Error: Failed to load image or convert it to data for analysis.")
                 return
             }
+            // Hand off to the Vision request performer.
             performVisionRequest(with: cgImage, imageData: imageData, originalFileName: imageURL.lastPathComponent)
         }
     }
 
-    /// Visionリクエストを実行して、画像内のフキダシを検出します。
+    /// Performs a Vision request to detect text bubbles in the given image.
     ///
-    /// 指定された`CGImage`に対して、事前に訓練されたCore MLモデル（`best.mlmodelc`）を
-    /// 使った`VNCoreMLRequest`を作成し、実行します。検出結果は`saveBubbles`メソッドに渡されます。
-    /// - Parameters:
-    ///   - cgImage: 分析対象のCGImage。
-    ///   - imageData: Core Dataに保存するための元の画像データ。
-    ///   - originalFileName: 元のファイル名。
+    /// This method uses a pre-trained Core ML model (`best.mlmodelc`) to find objects
+    /// that are classified as text bubbles. The results are then passed to the saving logic.
     private func performVisionRequest(with cgImage: CGImage, imageData: Data, originalFileName: String) {
-        do {
-            guard let modelURL = Bundle.main.url(forResource: "best", withExtension: "mlmodelc") else {
-                print("Model file not found.")
-                return
-            }
-            let mlModel = try MLModel(contentsOf: modelURL)
-            let vnModel = try VNCoreMLModel(for: mlModel)
-            let request = VNCoreMLRequest(model: vnModel) { [weak self] request, error in
-                if let error = error {
-                    print("Vision request error: \(error)")
-                    return
-                }
-                guard let results = request.results as? [VNRecognizedObjectObservation] else { return }
-                // cgImageを渡すように変更
-                self?.saveBubbles(results, for: imageData, originalFileName: originalFileName, cgImage: cgImage)
-            }
-            request.imageCropAndScaleOption = .scaleFit
-            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
-            try handler.perform([request])
-        } catch {
-            print("Model loading or inference error: \(error)")
-        }
-    }
-    
-    private let ocrEngineIdentifier = "MangaOCR-v1.0"
-
-    /// 検出されたフキダシの情報をCore Dataに保存し、切り抜いた画像を一時フォルダに保存します。
-    ///
-    /// このメソッドは、まず画像データのハッシュを計算して、対応する`Page`エンティティを検索または作成します。
-    /// 既存のフキダシ情報を削除した後、新しい検出結果を`BubbleEntity`として保存します。
-    /// 同時に、各フキダシの領域を`cgImage`から切り出し、一時ディレクトリにPNGファイルとして保存し、OCRを実行します。
-    /// すべてのOCRタスクが完了した後に、一度だけCore Dataコンテキストを保存します。
-    /// - Parameters:
-    ///   - results: Visionリクエストから得られた検出結果の配列。
-    ///   - imageData: ハッシュ計算とページ識別のための画像データ。
-    ///   - originalFileName: ページの元のファイル名。
-    ///   - cgImage: 切り出し元のCGImage。
-    private func saveBubbles(_ results: [VNRecognizedObjectObservation], for imageData: Data, originalFileName: String, cgImage: CGImage) {
-        let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
-        let ocrDispatchGroup = DispatchGroup()
-
-        // 切り抜いた画像を保存する一時ディレクトリを作成
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("cropped_bubbles")
-        do {
-            if !FileManager.default.fileExists(atPath: tempDir.path) {
-                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
-            }
-        } catch {
-            print("Failed to create temporary directory: \(error)")
+        guard let modelURL = Bundle.main.url(forResource: Constants.bubbleDetectorModelName, withExtension: Constants.bubbleDetectorModelExtension) else {
+            print("Error: Bubble detector model file not found.")
             return
         }
 
+        do {
+            let vnModel = try VNCoreMLModel(for: MLModel(contentsOf: modelURL))
+            let request = VNCoreMLRequest(model: vnModel) { [weak self] request, error in
+                if let error = error {
+                    print("Vision request failed: \(error.localizedDescription)")
+                    return
+                }
+                guard let results = request.results as? [VNRecognizedObjectObservation] else {
+                    print("Vision request completed but returned no results or an unexpected type.")
+                    return
+                }
+                self?.processVisionResults(results, forImage: cgImage, imageData: imageData, originalFileName: originalFileName)
+            }
+            request.imageCropAndScaleOption = .scaleFit
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
+            try handler.perform([request])
+        } catch {
+            print("Error: Failed to load VNCoreMLModel or perform request: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Processes the results from the Vision request, creating and saving bubble entities.
+    ///
+    /// This method orchestrates the entire process of saving bubble data:
+    /// 1. Sets up a temporary directory for cropped bubble images.
+    /// 2. Uses a `DispatchGroup` to coordinate multiple asynchronous OCR tasks.
+    /// 3. Performs all Core Data operations on the correct `viewContext` queue.
+    /// 4. Fetches or creates the `Page` entity for the image.
+    /// 5. Deletes any old bubbles associated with the page.
+    /// 6. Iterates through detected bubbles, creating `BubbleEntity` objects and dispatching OCR tasks.
+    /// 7. Saves the Core Data context once all OCR tasks are complete.
+    private func processVisionResults(_ results: [VNRecognizedObjectObservation], forImage cgImage: CGImage, imageData: Data, originalFileName: String) {
+        let ocrDispatchGroup = DispatchGroup()
+
+        // All subsequent Core Data operations must be on the context's queue.
         viewContext.perform {
-            let hash = DataHasher.computeSHA256(for: imageData)
-            let page = self.fetchOrCreatePage(with: hash, originalFileName: originalFileName)
+            let page = self.fetchOrCreatePage(with: DataHasher.computeSHA256(for: imageData), originalFileName: originalFileName)
             
-            // 既存のフキダシを削除
+            // Clear out any previously detected bubbles for this page.
             if let existingBubbles = page.bubbles as? NSSet {
-                for case let bubble as BubbleEntity in existingBubbles {
-                    self.viewContext.delete(bubble)
-                }
+                existingBubbles.forEach { self.viewContext.delete($0 as! NSManagedObject) }
             }
             
-            // 新しいフキダシを保存し、画像を切り抜く
+            // Process each detected bubble.
             for observation in results {
-                let newBubble = BubbleEntity(context: self.viewContext)
-                let rect = observation.boundingBox.toPixelRectFlipped(in: imageSize)
+                self.createAndProcessBubble(
+                    from: observation,
+                    in: cgImage,
+                    page: page,
+                    dispatchGroup: ocrDispatchGroup
+                )
+            }
 
-                newBubble.bubbleID = UUID()
-                newBubble.x = rect.origin.x
-                newBubble.y = rect.origin.y
-                newBubble.width = rect.size.width
-                newBubble.height = rect.size.height
-                newBubble.page = page
+            // After all OCR tasks have been dispatched, set up a notification
+            // to save the context to disk when they all complete.
+            ocrDispatchGroup.notify(queue: .main) {
+                self.saveContext()
+            }
+        }
+    }
 
-                // OCR関連のデフォルト値を設定
-                newBubble.shouldOcr = true // デフォルトでOCR対象とする
-                newBubble.ocrStatus = "pending"
+    /// Creates a single `BubbleEntity`, crops its image, and dispatches an OCR task.
+    private func createAndProcessBubble(from observation: VNRecognizedObjectObservation, in cgImage: CGImage, page: Page, dispatchGroup: DispatchGroup) {
+        let newBubble = BubbleEntity(context: self.viewContext)
+        let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let rect = observation.boundingBox.toPixelRectFlipped(in: imageSize)
 
-                // 画像を切り出して保存し、OCRを実行
-                if newBubble.shouldOcr, let croppedCGImage = cgImage.cropping(to: rect) {
-                    let fileName = "\(newBubble.bubbleID!).png"
-                    let fileURL = tempDir.appendingPathComponent(fileName)
-                    do {
-                        try croppedCGImage.save(to: fileURL)
+        newBubble.bubbleID = UUID()
+        newBubble.x = rect.origin.x
+        newBubble.y = rect.origin.y
+        newBubble.width = rect.size.width
+        newBubble.height = rect.size.height
+        newBubble.page = page
+        newBubble.shouldOcr = true
+        newBubble.ocrStatus = "pending"
 
-                        // OCR実行
-                        ocrDispatchGroup.enter()
-                        self.runOCR(on: croppedCGImage, for: newBubble.objectID) {
-                            ocrDispatchGroup.leave()
-                        }
+        guard newBubble.shouldOcr, let croppedCGImage = cgImage.cropping(to: rect) else {
+            newBubble.ocrStatus = "skipped"
+            return
+        }
 
-                    } catch {
-                        print("Failed to save cropped image: \(error)")
-                        newBubble.ocrStatus = "failure"
-                    }
-                } else {
-                    newBubble.ocrStatus = "skipped"
+        // Dispatch an asynchronous OCR task for the cropped image.
+        dispatchGroup.enter()
+        runOCR(on: croppedCGImage, for: newBubble.objectID) {
+            dispatchGroup.leave()
+        }
+    }
+
+    /// Performs OCR on a single cropped image and updates the corresponding `BubbleEntity`.
+    ///
+    /// This method includes a retry mechanism: if OCR fails with the primary normalization
+    /// method, it attempts again with a secondary method.
+    private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, completion: @escaping () -> Void) {
+        // OCR is computationally expensive, so it's run on a background thread.
+        DispatchQueue.global(qos: .userInitiated).async {
+            var ocrResult: (text: String, identifier: String)
+            
+            do {
+                // 1. First attempt with the primary normalization.
+                let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+                ocrResult = (text, Constants.ocrEngineIdentifier)
+            } catch {
+                print("OCR failed with primary normalization, retrying... Error: \(error)")
+                do {
+                    // 2. Second attempt with the fallback normalization.
+                    let text = try self.ocrEngine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                    ocrResult = (text, Constants.ocrEngineIdentifierRetry)
+                } catch {
+                    print("OCR failed with secondary normalization. Error: \(error)")
+                    ocrResult = ("[\(error.localizedDescription)]", "failure")
                 }
             }
-            
-            // すべてのOCRタスクが完了した後にコンテキストを保存
-            ocrDispatchGroup.notify(queue: .main) {
-                do {
-                    if self.viewContext.hasChanges {
-                        try self.viewContext.save()
-                        print("Successfully saved bubbles and OCR results to Core Data.")
-                    }
-                } catch {
-                    print("Failed to save to Core Data: \(error)")
-                    self.viewContext.rollback()
-                }
+
+            // 3. Update the Core Data object on its own context's queue.
+            self.viewContext.perform {
+                self.updateBubble(bubbleObjectID, with: ocrResult)
+                completion()
             }
         }
     }
     
-    /// 指定されたハッシュ値を持つ`Page`エンティティをCore Dataから取得または新規作成します。
-    ///
-    /// - Parameters:
-    ///   - hash: 検索または作成のキーとなる画像データのSHA-256ハッシュ。
-    ///   - originalFileName: 新規作成時に使用する元のファイル名。
-    /// - Returns: 既存の、または新しく作成された`Page`エンティティ。
+    /// Updates a `BubbleEntity` with the results of an OCR operation.
+    /// This method must be called on the `viewContext`'s queue.
+    private func updateBubble(_ bubbleObjectID: NSManagedObjectID, with result: (text: String, identifier: String)) {
+        guard let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity else {
+            return
+        }
+
+        let isSuccess = result.identifier != "failure"
+
+        bubble.ocrText = result.text
+        bubble.ocrTimestamp = Date()
+        bubble.ocrEngineIdentifier = result.identifier
+        bubble.ocrConfidence = isSuccess ? 1.0 : 0.0 // Placeholder confidence
+        bubble.ocrStatus = isSuccess ? "success" : "failure"
+
+        print("OCR Result for bubble [\(bubble.bubbleID!)] with engine [\(result.identifier)]: \(result.text)")
+    }
+
+    // MARK: - Core Data Helper Methods
+
+    /// Fetches a `Page` entity with a specific hash from Core Data, or creates one if not found.
+    /// This method must be called on the `viewContext`'s queue.
     private func fetchOrCreatePage(with hash: String, originalFileName: String) -> Page {
         let request: NSFetchRequest<Page> = Page.fetchRequest()
         request.predicate = NSPredicate(format: "fileHash == %@", hash)
         
-        do {
-            let results = try viewContext.fetch(request)
-            if let existingPage = results.first {
-                return existingPage
-            }
-        } catch {
-            print("Failed to fetch page: \(error)")
+        if let existingPage = try? viewContext.fetch(request).first {
+            return existingPage
         }
         
         let newPage = Page(context: viewContext)
         newPage.pageID = UUID()
         newPage.fileHash = hash
         newPage.originalFileName = originalFileName
-        newPage.pageNumber = 0 // プレースホルダー
-        let book = fetchOrCreateBook()
-        newPage.book = book
+        newPage.book = fetchOrCreateBook() // Associate with a book
         return newPage
     }
 
-    /// `Book`エンティティをCore Dataから取得または新規作成します。
-    ///
-    /// 現在の実装では、最初の`Book`エンティティを取得するか、存在しない場合は
-    /// "Default Book"というタイトルの新しい`Book`を作成します。
-    /// - Returns: 既存の、または新しく作成された`Book`エンティティ。
+    /// Fetches the first `Book` entity or creates a default one if none exist.
+    /// This method must be called on the `viewContext`'s queue.
     private func fetchOrCreateBook() -> Book {
         let request: NSFetchRequest<Book> = Book.fetchRequest()
         request.fetchLimit = 1
         
-        do {
-            let results = try viewContext.fetch(request)
-            if let existingBook = results.first {
-                return existingBook
-            }
-        } catch {
-            print("Failed to fetch book: \(error)")
+        if let existingBook = try? viewContext.fetch(request).first {
+            return existingBook
         }
         
         let newBook = Book(context: viewContext)
         newBook.bookID = UUID()
         newBook.title = "Default Book"
-        newBook.folderPath = "" // プレースホルダー
         return newBook
     }
 
-    /// 指定された画像に対してOCRを実行し、結果をCore Dataに保存します。
-    /// 失敗した場合は、異なる正規化方法で再試行します。
-    /// - Parameters:
-    ///   - cgImage: OCRを実行する画像。
-    ///   - bubbleObjectID: 結果を保存するBubbleEntityのNSManagedObjectID。
-    ///   - completion: 処理完了時に呼び出されるクロージャ。
-    private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, completion: @escaping () -> Void) {
-        guard let engine = self.ocrEngine else {
-            print("OCR for \(bubbleObjectID): Engine not available.")
-            viewContext.perform {
-                if let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity {
-                    bubble.ocrStatus = "failure"
-                    bubble.ocrText = "Engine not available"
-                }
-                completion()
-            }
-            return
-        }
-
-        // OCR処理は重い可能性があるため、バックグラウンドスレッドで実行
-        DispatchQueue.global(qos: .userInitiated).async {
-            // 1. 最初の試行 (改良版スケール)
-            var resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
-            var finalIdentifier = self.ocrEngineIdentifier
-            let isFailed = resultText.isEmpty || resultText.starts(with: "[OCR Error:")
-
-            // 2. 失敗した場合、2回目の試行 (オリジナル版スケール)
-            if isFailed {
-                print("OCR failed or returned empty with default normalization, retrying with alternate...")
-                resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
-                finalIdentifier = "MangaOCR-v1.0-kai" // 2回目であることを示すIDに変更
-            }
-
-            let isStillFailed = resultText.isEmpty || resultText.starts(with: "[OCR Error:")
-
-            // 3. Core Dataの更新は、そのコンテキストのキューで行う
-            self.viewContext.perform {
-                guard let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity else {
-                    completion()
-                    return
-                }
-
-                // OCR結果を保存
-                bubble.ocrText = resultText
-                bubble.ocrTimestamp = Date()
-                bubble.ocrEngineIdentifier = finalIdentifier
-                bubble.ocrConfidence = isStillFailed ? 0.0 : 1.0
-                bubble.ocrStatus = isStillFailed ? "failure" : "success"
-
-                print("Final OCR Result for bubble [\(bubble.bubbleID!)] with engine [\(finalIdentifier)]: \(resultText)")
-
-                // 処理完了を通知
-                completion()
-            }
+    /// Saves the Core Data context if there are changes.
+    private func saveContext() {
+        guard viewContext.hasChanges else { return }
+        do {
+            try viewContext.save()
+            print("Successfully saved bubbles and OCR results to Core Data.")
+        } catch {
+            print("Failed to save Core Data context: \(error.localizedDescription)")
+            // Rollback to discard the failed changes.
+            viewContext.rollback()
         }
     }
+
 }

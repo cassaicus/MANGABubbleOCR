@@ -1,62 +1,83 @@
 import Foundation
+import CoreGraphics // For CGRect
 
-/// 漫画の1ページを表すデータモデル。
+// MARK: - UI Data Models
+
+/*
+ NOTE: These data models (`MangaPage`, `Bubble`) are designed for use within the UI layer (e.g., SwiftUI views).
+ They are distinct from the Core Data managed objects (`Page`, `BubbleEntity`).
+
+ This separation is an intentional architectural choice (a pattern sometimes called "ViewModel" or "UI Model"):
+ - UI models can be structs, which are safer and easier to reason about in SwiftUI.
+ - They can be tailored specifically to the needs of the view, containing only the necessary data in the right format.
+ - It decouples the UI from the persistence layer (Core Data). Changes to the database schema
+   don't automatically break the UI, and vice-versa.
+ - They are not tied to a Core Data context and can be passed around freely.
+*/
+
+
+/// Represents a single page of a manga, serving as a data model for the UI.
 ///
-/// この構造体は、画像そのもののURLに加え、OCR結果や翻訳テキストなど、
-/// ページに関連するすべての情報を保持します。
+/// This struct holds all information related to a page that the UI needs to display,
+/// including the source image URL and any detected text bubbles.
 struct MangaPage: Identifiable, Equatable {
-    /// 安定した一意なID。画像URLの絶対パスを使用します。
+    /// A stable, unique identifier for the page, derived from the absolute string of the source URL.
     var id: String { sourceURL.absoluteString }
 
-    /// 元となる画像ファイルのURL。
+    /// The URL of the original image file for this page.
     let sourceURL: URL
 
-    /// ページ内で検出された吹き出しの配列。
+    /// An array of text bubbles detected within this page.
     var bubbles: [Bubble] = []
 
-    /// ページの処理状態。
+    /// The current processing status of this page.
     var status: ProcessingStatus = .pending
 
-    // Equatableに準拠するため、idで比較します。
+    // Conformance to Equatable is based on the unique ID.
     static func == (lhs: MangaPage, rhs: MangaPage) -> Bool {
         lhs.id == rhs.id
     }
 }
 
-/// ページの処理状態を示すenum。
-enum ProcessingStatus {
-    case pending      // 未処理
-    case processing   // 処理中
-    case completed    // 処理完了
-    case failed(Error) // 処理失敗
+/// An enumeration describing the processing status of a manga page.
+enum ProcessingStatus: Equatable {
+    /// Not yet processed.
+    case pending
+    /// Currently being processed (e.g., bubble detection or OCR is running).
+    case processing
+    /// Processing has completed successfully.
+    case completed
+    /// Processing failed with an associated error.
+    case failed(Error)
 
-    // Equatableに準拠させるための実装。
+    // Custom implementation for Equatable conformance.
     static func == (lhs: ProcessingStatus, rhs: ProcessingStatus) -> Bool {
         switch (lhs, rhs) {
         case (.pending, .pending),
              (.processing, .processing),
              (.completed, .completed):
             return true
-        case (.failed, .failed):
-            // 本来はErrorの内容も比較すべきだが、ここでは簡略化
-            return true
+        case let (.failed(lhsError), .failed(rhsError)):
+            // For simplicity, we compare the localized descriptions of the errors.
+            // A more robust implementation might compare error codes or domains.
+            return lhsError.localizedDescription == rhsError.localizedDescription
         default:
             return false
         }
     }
 }
 
-/// 1つの吹き出しに関する情報を表すデータモデル。
+/// Represents the information for a single text bubble within a page.
 struct Bubble: Identifiable, Equatable {
-    /// 構造体内で一意なID。
+    /// A unique identifier for this specific bubble instance.
     let id = UUID()
 
-    /// 画像内での吹き出しの位置（CGRect）。
+    /// The position and size of the bubble within its parent image, represented by a `CGRect`.
     let rect: CGRect
 
-    /// 元の言語のテキスト（OCR結果）。
+    /// The original text as recognized by the OCR engine.
     var originalText: String
 
-    /// 翻訳後のテキスト。
+    /// The translated text. This is optional as translation may not have occurred yet.
     var translatedText: String?
 }
