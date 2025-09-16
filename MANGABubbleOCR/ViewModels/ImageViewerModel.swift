@@ -303,13 +303,16 @@ class ImageViewerModel: ObservableObject {
             // 1. 最初の試行 (改良版スケール)
             var resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
             var finalIdentifier = self.ocrEngineIdentifier
+            let isFailed = resultText.isEmpty || resultText.starts(with: "[OCR Error:")
 
             // 2. 失敗した場合、2回目の試行 (オリジナル版スケール)
-            if resultText.starts(with: "[OCR Error:") {
-                print("OCR failed with default normalization, retrying with alternate...")
+            if isFailed {
+                print("OCR failed or returned empty with default normalization, retrying with alternate...")
                 resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
                 finalIdentifier = "MangaOCR-v1.0-kai" // 2回目であることを示すIDに変更
             }
+
+            let isStillFailed = resultText.isEmpty || resultText.starts(with: "[OCR Error:")
 
             // 3. Core Dataの更新は、そのコンテキストのキューで行う
             self.viewContext.perform {
@@ -322,8 +325,8 @@ class ImageViewerModel: ObservableObject {
                 bubble.ocrText = resultText
                 bubble.ocrTimestamp = Date()
                 bubble.ocrEngineIdentifier = finalIdentifier
-                bubble.ocrConfidence = resultText.starts(with: "[OCR Error:") ? 0.0 : 1.0
-                bubble.ocrStatus = resultText.starts(with: "[OCR Error:") ? "failure" : "success"
+                bubble.ocrConfidence = isStillFailed ? 0.0 : 1.0
+                bubble.ocrStatus = isStillFailed ? "failure" : "success"
 
                 print("Final OCR Result for bubble [\(bubble.bubbleID!)] with engine [\(finalIdentifier)]: \(resultText)")
 
