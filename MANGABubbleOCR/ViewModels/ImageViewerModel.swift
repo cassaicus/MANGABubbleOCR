@@ -133,11 +133,14 @@ class ImageViewerModel: ObservableObject {
         }
     }
     
+    private let ocrEngineIdentifier = "MangaOCR-v1.0"
+
     /// 検出されたフキダシの情報をCore Dataに保存し、切り抜いた画像を一時フォルダに保存します。
     ///
     /// このメソッドは、まず画像データのハッシュを計算して、対応する`Page`エンティティを検索または作成します。
     /// 既存のフキダシ情報を削除した後、新しい検出結果を`BubbleEntity`として保存します。
-    /// 同時に、各フキダシの領域を`cgImage`から切り出し、一時ディレクトリにPNGファイルとして保存します。
+    /// 同時に、各フキダシの領域を`cgImage`から切り出し、一時ディレクトリにPNGファイルとして保存し、OCRを実行します。
+    /// すべてのOCRタスクが完了した後に、一度だけCore Dataコンテキストを保存します。
     /// - Parameters:
     ///   - results: Visionリクエストから得られた検出結果の配列。
     ///   - imageData: ハッシュ計算とページ識別のための画像データ。
@@ -145,6 +148,7 @@ class ImageViewerModel: ObservableObject {
     ///   - cgImage: 切り出し元のCGImage。
     private func saveBubbles(_ results: [VNRecognizedObjectObservation], for imageData: Data, originalFileName: String, cgImage: CGImage) {
         let imageSize = CGSize(width: cgImage.width, height: cgImage.height)
+        let ocrDispatchGroup = DispatchGroup()
 
         // 切り抜いた画像を保存する一時ディレクトリを作成
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("cropped_bubbles")
@@ -154,7 +158,7 @@ class ImageViewerModel: ObservableObject {
             }
         } catch {
             print("Failed to create temporary directory: \(error)")
-            return // ディレクトリがなければ処理を続行できない
+            return
         }
 
         viewContext.perform {
@@ -172,38 +176,51 @@ class ImageViewerModel: ObservableObject {
             for observation in results {
                 let newBubble = BubbleEntity(context: self.viewContext)
                 let rect = observation.boundingBox.toPixelRectFlipped(in: imageSize)
-                let bubbleID = UUID()
 
-                newBubble.bubbleID = bubbleID
+                newBubble.bubbleID = UUID()
                 newBubble.x = rect.origin.x
                 newBubble.y = rect.origin.y
                 newBubble.width = rect.size.width
                 newBubble.height = rect.size.height
                 newBubble.page = page
 
+                // OCR関連のデフォルト値を設定
+                newBubble.shouldOcr = true // デフォルトでOCR対象とする
+                newBubble.ocrStatus = "pending"
+
                 // 画像を切り出して保存し、OCRを実行
-                if let croppedCGImage = cgImage.cropping(to: rect) {
-                    let fileName = "\(bubbleID).png"
+                if newBubble.shouldOcr, let croppedCGImage = cgImage.cropping(to: rect) {
+                    let fileName = "\(newBubble.bubbleID!).png"
                     let fileURL = tempDir.appendingPathComponent(fileName)
                     do {
                         try croppedCGImage.save(to: fileURL)
-                        print("Saved cropped image to: \(fileURL.path)")
 
                         // OCR実行
-                        self.runOCR(on: croppedCGImage, bubbleID: bubbleID)
+                        ocrDispatchGroup.enter()
+                        self.runOCR(on: croppedCGImage, for: newBubble.objectID) {
+                            ocrDispatchGroup.leave()
+                        }
 
                     } catch {
                         print("Failed to save cropped image: \(error)")
+                        newBubble.ocrStatus = "failure"
                     }
+                } else {
+                    newBubble.ocrStatus = "skipped"
                 }
             }
             
-            do {
-                try self.viewContext.save()
-                print("Successfully saved bubbles to Core Data.")
-            } catch {
-                print("Failed to save to Core Data: \(error)")
-                self.viewContext.rollback()
+            // すべてのOCRタスクが完了した後にコンテキストを保存
+            ocrDispatchGroup.notify(queue: .main) {
+                do {
+                    if self.viewContext.hasChanges {
+                        try self.viewContext.save()
+                        print("Successfully saved bubbles and OCR results to Core Data.")
+                    }
+                } catch {
+                    print("Failed to save to Core Data: \(error)")
+                    self.viewContext.rollback()
+                }
             }
         }
     }
@@ -262,20 +279,49 @@ class ImageViewerModel: ObservableObject {
         return newBook
     }
 
-    /// 指定された画像に対してOCRを実行し、結果をコンソールに出力します。
+    /// 指定された画像に対してOCRを実行し、結果をCore Dataに保存します。
     /// - Parameters:
     ///   - cgImage: OCRを実行する画像。
-    ///   - bubbleID: どのフキダシに属するかを示すID。
-    private func runOCR(on cgImage: CGImage, bubbleID: UUID) {
+    ///   - bubbleObjectID: 結果を保存するBubbleEntityのNSManagedObjectID。
+    ///   - completion: 処理完了時に呼び出されるクロージャ。
+    private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, completion: @escaping () -> Void) {
         guard let engine = self.ocrEngine else {
-            print("OCR for \(bubbleID): Engine not available.")
+            print("OCR for \(bubbleObjectID): Engine not available.")
+            // エンジンがない場合でもcompletionを呼ぶ
+            viewContext.perform {
+                if let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity {
+                    bubble.ocrStatus = "failure"
+                    bubble.ocrText = "Engine not available"
+                }
+                completion()
+            }
             return
         }
 
         // OCR処理は重い可能性があるため、バックグラウンドスレッドで実行
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
-            print("OCR Result for bubble [\(bubbleID)]: \(result)")
+            let ocrResultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+
+            // Core Dataの更新は、そのコンテキストのキューで行う必要がある
+            self.viewContext.perform {
+                guard let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity else {
+                    completion()
+                    return
+                }
+
+                // OCR結果を保存
+                bubble.ocrText = ocrResultText
+                bubble.ocrTimestamp = Date()
+                bubble.ocrEngineIdentifier = self.ocrEngineIdentifier
+                // 現在のモデルは確信度を返さないため、プレースホルダーを設定
+                bubble.ocrConfidence = ocrResultText.starts(with: "[OCR Error:") ? 0.0 : 1.0
+                bubble.ocrStatus = ocrResultText.starts(with: "[OCR Error:") ? "failure" : "success"
+
+                print("OCR Result for bubble [\(bubble.bubbleID!)]: \(ocrResultText)")
+
+                // 処理完了を通知
+                completion()
+            }
         }
     }
 }
