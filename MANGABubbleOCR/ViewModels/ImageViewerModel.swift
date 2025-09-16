@@ -280,6 +280,7 @@ class ImageViewerModel: ObservableObject {
     }
 
     /// 指定された画像に対してOCRを実行し、結果をCore Dataに保存します。
+    /// 失敗した場合は、異なる正規化方法で再試行します。
     /// - Parameters:
     ///   - cgImage: OCRを実行する画像。
     ///   - bubbleObjectID: 結果を保存するBubbleEntityのNSManagedObjectID。
@@ -287,7 +288,6 @@ class ImageViewerModel: ObservableObject {
     private func runOCR(on cgImage: CGImage, for bubbleObjectID: NSManagedObjectID, completion: @escaping () -> Void) {
         guard let engine = self.ocrEngine else {
             print("OCR for \(bubbleObjectID): Engine not available.")
-            // エンジンがない場合でもcompletionを呼ぶ
             viewContext.perform {
                 if let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity {
                     bubble.ocrStatus = "failure"
@@ -300,9 +300,18 @@ class ImageViewerModel: ObservableObject {
 
         // OCR処理は重い可能性があるため、バックグラウンドスレッドで実行
         DispatchQueue.global(qos: .userInitiated).async {
-            let ocrResultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+            // 1. 最初の試行 (改良版スケール)
+            var resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_minus1_1)
+            var finalIdentifier = self.ocrEngineIdentifier
 
-            // Core Dataの更新は、そのコンテキストのキューで行う必要がある
+            // 2. 失敗した場合、2回目の試行 (オリジナル版スケール)
+            if resultText.starts(with: "[OCR Error:") {
+                print("OCR failed with default normalization, retrying with alternate...")
+                resultText = engine.recognizeText(from: cgImage, normalization: .scaleTo_0_1)
+                finalIdentifier = "MangaOCR-v1.0-kai" // 2回目であることを示すIDに変更
+            }
+
+            // 3. Core Dataの更新は、そのコンテキストのキューで行う
             self.viewContext.perform {
                 guard let bubble = try? self.viewContext.existingObject(with: bubbleObjectID) as? BubbleEntity else {
                     completion()
@@ -310,14 +319,13 @@ class ImageViewerModel: ObservableObject {
                 }
 
                 // OCR結果を保存
-                bubble.ocrText = ocrResultText
+                bubble.ocrText = resultText
                 bubble.ocrTimestamp = Date()
-                bubble.ocrEngineIdentifier = self.ocrEngineIdentifier
-                // 現在のモデルは確信度を返さないため、プレースホルダーを設定
-                bubble.ocrConfidence = ocrResultText.starts(with: "[OCR Error:") ? 0.0 : 1.0
-                bubble.ocrStatus = ocrResultText.starts(with: "[OCR Error:") ? "failure" : "success"
+                bubble.ocrEngineIdentifier = finalIdentifier
+                bubble.ocrConfidence = resultText.starts(with: "[OCR Error:") ? 0.0 : 1.0
+                bubble.ocrStatus = resultText.starts(with: "[OCR Error:") ? "failure" : "success"
 
-                print("OCR Result for bubble [\(bubble.bubbleID!)]: \(ocrResultText)")
+                print("Final OCR Result for bubble [\(bubble.bubbleID!)] with engine [\(finalIdentifier)]: \(resultText)")
 
                 // 処理完了を通知
                 completion()
