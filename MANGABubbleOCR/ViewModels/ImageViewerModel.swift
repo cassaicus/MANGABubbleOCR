@@ -413,7 +413,7 @@ class ImageViewerModel: ObservableObject {
                     let response = try await session.translate(bubbleData.text)
 
                     // Get back on the Core Data queue to find the object by its ID and update it.
-                    self.viewContext.perform {
+                    await self.viewContext.perform {
                         if let bubbleToUpdate = try? self.viewContext.existingObject(with: bubbleData.objectID) as? BubbleEntity {
                             bubbleToUpdate.translatedText = response.targetText
                             print("Translated '\(bubbleData.text)' to '\(response.targetText)'")
@@ -425,7 +425,7 @@ class ImageViewerModel: ObservableObject {
             }
 
             // 5. Save the context once all translation tasks are dispatched.
-            self.viewContext.perform {
+            await self.viewContext.perform {
                 self.saveContext()
                 print("Translation finished and context saved.")
             }
