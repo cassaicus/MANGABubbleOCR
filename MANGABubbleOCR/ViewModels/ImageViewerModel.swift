@@ -376,8 +376,8 @@ class ImageViewerModel: ObservableObject {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
 
             // 1. Create a translation session.
-            // The initializer arguments fix the previous build error.
-            let session = TranslationSession(source: .japanese, target: .english)
+            // The initializer arguments and language codes are corrected based on build errors.
+            let session = TranslationSession(installedSource: Locale.Language("ja"), target: Locale.Language("en"))
 
             // 2. Get image data and hash to find the correct Page entity.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
