@@ -378,7 +378,15 @@ class ImageViewerModel: ObservableObject {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
 
             // 1. Create a translation session using the corrected initializer.
-            let session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
+            let session: TranslationSession
+            if #available(macOS 26.0, *) {
+                session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
+            } else {
+                // Fallback on earlier versions
+                print("Fallback on earlier versions")
+
+                return
+            }
 
             // 2. Get image data and hash.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
