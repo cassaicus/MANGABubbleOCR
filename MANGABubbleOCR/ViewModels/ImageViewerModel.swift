@@ -778,16 +778,10 @@ class ImageViewerModel: ObservableObject {
                 let constraintRect = CGSize(width: finalRect.width, height: finalRect.height)
                 let finalBoundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
-                // Add a small buffer to the calculated text height to avoid clipping descenders.
-                // This creates a slightly taller drawing rect and re-centers it.
-                // ディセンダのクリッピングを避けるために、計算されたテキストの高さに小さなバッファを追加します。
-                // これにより、少し高さのある描画矩形が作成され、再センタリングされます。
-                let heightBuffer = fontSize * 0.2
-                let bufferedTextHeight = finalBoundingBox.height + heightBuffer
                 let textRect = CGRect(x: finalRect.origin.x,
-                                      y: finalRect.origin.y + (finalRect.height - bufferedTextHeight) / 2,
+                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2,
                                       width: finalRect.width,
-                                      height: bufferedTextHeight)
+                                      height: finalBoundingBox.height)
 
                 translatedText.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
             }
