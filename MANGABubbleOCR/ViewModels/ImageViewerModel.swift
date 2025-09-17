@@ -730,10 +730,23 @@ class ImageViewerModel: ObservableObject {
                     height: bubble.height * scaleY
                 )
 
-                // Fill the bubble's background.
-                // フキダシの背景を塗りつぶします。
+                // The drawing handler's context uses a flipped coordinate system (origin at bottom-left).
+                // We must convert our top-left based Y-coordinate to this system.
+                // 描画ハンドラのコンテキストは反転した座標系（原点が左下）を使用します。
+                // 左上基準のY座標をこのシステムに変換する必要があります。
+                let flippedY = originalImage.size.height - bubbleRect.origin.y - bubbleRect.size.height
+                let finalRect = CGRect(
+                    x: bubbleRect.origin.x,
+                    y: flippedY,
+                    width: bubbleRect.size.width,
+                    height: bubbleRect.size.height
+                )
+
+
+                // Fill the bubble's background using the corrected rect.
+                // 修正された矩形を使用してフキダシの背景を塗りつぶします。
                 NSColor.white.setFill()
-                bubbleRect.fill()
+                finalRect.fill()
 
                 let paragraphStyle = NSMutableParagraphStyle()
                 paragraphStyle.alignment = .center
@@ -749,10 +762,10 @@ class ImageViewerModel: ObservableObject {
                 while fontSize > 6 {
                     let font = NSFont.boldSystemFont(ofSize: fontSize)
                     attributes[.font] = font
-                    let constraintRect = CGSize(width: bubbleRect.width * 0.9, height: .greatestFiniteMagnitude)
+                    let constraintRect = CGSize(width: finalRect.width * 0.9, height: .greatestFiniteMagnitude)
                     let boundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
-                    if boundingBox.height <= bubbleRect.height * 0.9 {
+                    if boundingBox.height <= finalRect.height * 0.9 {
                         break // Font size is good
                     }
                     fontSize -= 2
@@ -760,12 +773,12 @@ class ImageViewerModel: ObservableObject {
 
                 let font = NSFont.boldSystemFont(ofSize: fontSize)
                 attributes[.font] = font
-                let constraintRect = CGSize(width: bubbleRect.width, height: bubbleRect.height)
+                let constraintRect = CGSize(width: finalRect.width, height: finalRect.height)
                 let finalBoundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
-                let textRect = CGRect(x: bubbleRect.origin.x,
-                                      y: bubbleRect.origin.y + (bubbleRect.height - finalBoundingBox.height) / 2,
-                                      width: bubbleRect.width,
+                let textRect = CGRect(x: finalRect.origin.x,
+                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2,
+                                      width: finalRect.width,
                                       height: finalBoundingBox.height)
 
                 translatedText.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
