@@ -778,8 +778,15 @@ class ImageViewerModel: ObservableObject {
                 let constraintRect = CGSize(width: finalRect.width, height: finalRect.height)
                 let finalBoundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
+                // To counteract minor clipping of characters with descenders (like 'g', 'y'),
+                // we shift the final text block up slightly. A shift of 10% of the font size
+                // is a safe value that shouldn't cause clipping at the top.
+                // 'g'や'y'のようなディセンダを持つ文字のわずかなクリッピングを解消するため、
+                // 最終的なテキストブロックをわずかに上にシフトします。フォントサイズの10%のシフトは、
+                // 上部でのクリッピングを引き起こさない安全な値です。
+                let verticalOffset = fontSize * 0.1
                 let textRect = CGRect(x: finalRect.origin.x,
-                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2,
+                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2 + verticalOffset,
                                       width: finalRect.width,
                                       height: finalBoundingBox.height)
 
