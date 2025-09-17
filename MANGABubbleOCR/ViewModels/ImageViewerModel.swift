@@ -423,28 +423,16 @@ class ImageViewerModel: ObservableObject {
                     }
                 } catch {
                     let nsError = error as NSError
-                    // Check for the specific "model unavailable" error.
-                    if nsError.domain == "TranslationErrorDomain" && nsError.code == 16 {
-                        // Use a static flag to ensure this detailed message is printed only once.
-                        if !Self.hasPrintedLanguageModelInstructions {
-                            print("""
-                            -----------------------------------------------------------------
-                            翻訳エラー: 翻訳言語モデルがMacにインストールされていません。
-                            これはコードの問題ではなく、macOSの環境設定が必要です。
-
-                            解決策:
-                            1. 「システム設定」を開きます。
-                            2. 「一般」 > 「言語と地域」に進みます。
-                            3. 一番下にある「翻訳言語...」ボタンをクリックします。
-                            4. 「日本語」と「英語」の横にある雲のアイコンをクリックして、言語をダウンロードしてください。
-                            5. ダウンロード完了後、アプリを再実行してください。
-                            -----------------------------------------------------------------
-                            """)
-                            Self.hasPrintedLanguageModelInstructions = true
-                        }
-                    } else {
-                        print("Failed to translate text '\(bubbleData.text)': \(error.localizedDescription)")
-                    }
+                    // Print detailed error information for debugging.
+                    print("""
+                    -----------------------------------------------------------------
+                    翻訳エラーが発生しました。
+                    テキスト: '\(bubbleData.text)'
+                    エラー内容: \(error.localizedDescription)
+                    エラードメイン: \(nsError.domain)
+                    エラーコード: \(nsError.code)
+                    -----------------------------------------------------------------
+                    """)
                 }
             }
 
