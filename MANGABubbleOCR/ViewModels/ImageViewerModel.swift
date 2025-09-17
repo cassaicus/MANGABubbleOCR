@@ -417,34 +417,18 @@ class ImageViewerModel: ObservableObject {
 
         Task {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
-
-            // 1. Create a translation session using the corrected initializer.
-//            let session: TranslationSession
-//            if #available(macOS 26.0, *) {
-//                session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
-//            } else {
-//                // Fallback on earlier versions
-//                print("Fallback on earlier versions")
-//
-//                return
-//            }
-
             
             guard #available(macOS 26.0, *) else {
                 print("Fallback on earlier versions")
                 return
             }
 
+            // Session must be created before we enter the async context of the viewContext
             let session = TranslationSession(
                 installedSource: Locale.Language(identifier: "ja"),
                 target: Locale.Language(identifier: "en")
             )
-
-//            let response = try await session.translate(bubbleData.text)
             
-            
-            
-            // 2. Get image data and hash.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
                   let imageData = nsImage.tiffRepresentation else {
                 print("Error: Failed to load image for translation.")
@@ -452,66 +436,53 @@ class ImageViewerModel: ObservableObject {
             }
             let imageHash = DataHasher.computeSHA256(for: imageData)
 
-            // 3. Fetch data needed for translation from Core Data.
-            let (pageObjectID, bubblesToTranslate): (NSManagedObjectID?, [(objectID: NSManagedObjectID, text: String)]) = self.viewContext.performAndWait {
+            // Perform all Core Data fetches and translations within the main actor's context.
+            await viewContext.perform {
                 let request: NSFetchRequest<Page> = Page.fetchRequest()
                 request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
-                guard let page = try? self.viewContext.fetch(request).first,
-                      let bubbles = page.bubbles as? Set<BubbleEntity> else {
-                    return (nil, [])
+
+                guard let page = (try? self.viewContext.fetch(request))?.first,
+                      let bubbles = page.bubbles as? Set<BubbleEntity>,
+                      !bubbles.isEmpty else {
+                    print("No page or bubbles with text found to translate.")
+                    return
                 }
-                // Extract the necessary data into a thread-safe structure to pass across threads.
-                let bubbleData = bubbles.compactMap { bubble -> (NSManagedObjectID, String)? in
-                    guard let text = bubble.ocrText, !text.isEmpty else { return nil }
-                    return (objectID: bubble.objectID, text: text)
-                }
-                return (page.objectID, bubbleData)
-            }
 
-            guard let pageObjectID = pageObjectID, !bubblesToTranslate.isEmpty else {
-                print("No page or no bubbles with text found to translate.")
-                return
-            }
+                var allSucceeded = true
 
-            // 4. Translate each bubble using the thread-safe data.
-            for bubbleData in bubblesToTranslate {
-                do {
-                    // The 'translate' method returns a Response object containing the translated text.
-                    let response = try await session.translate(bubbleData.text)
+                for bubble in bubbles {
+                    guard let text = bubble.ocrText, !text.isEmpty else { continue }
 
-                    // Get back on the Core Data queue to find the object by its ID and update it.
-                    await self.viewContext.perform {
-                        if let bubbleToUpdate = try? self.viewContext.existingObject(with: bubbleData.objectID) as? BubbleEntity {
-                            bubbleToUpdate.translatedText = response.targetText
-                            print("Translated '\(bubbleData.text)' to '\(response.targetText)'")
-                        }
+                    do {
+                        let response = try await session.translate(text)
+                        bubble.translatedText = response.targetText
+                        print("Translated '\(text)' to '\(response.targetText)'")
+                    } catch {
+                        allSucceeded = false
+                        let nsError = error as NSError
+                        print("""
+                        -----------------------------------------------------------------
+                        翻訳エラーが発生しました。
+                        テキスト: '\(text)'
+                        エラー内容: \(error.localizedDescription)
+                        エラードメイン: \(nsError.domain)
+                        エラーコード: \(nsError.code)
+                        -----------------------------------------------------------------
+                        """)
                     }
-                } catch {
-                    let nsError = error as NSError
-                    // Print detailed error information for debugging.
-                    print("""
-                    -----------------------------------------------------------------
-                    翻訳エラーが発生しました。
-                    テキスト: '\(bubbleData.text)'
-                    エラー内容: \(error.localizedDescription)
-                    エラードメイン: \(nsError.domain)
-                    エラーコード: \(nsError.code)
-                    -----------------------------------------------------------------
-                    """)
                 }
-            }
 
-            // 5. Save the context and update the flag.
-            await self.viewContext.perform {
-                if let pageToUpdate = try? self.viewContext.existingObject(with: pageObjectID) as? Page {
-                    pageToUpdate.isTranslationDone = true
+                if allSucceeded {
+                    page.isTranslationDone = true
                     print("Setting isTranslationDone to true for page.")
+                    // Update UI property on main thread
+                    self.isTranslationDoneForCurrentPage = true
+                } else {
+                    print("One or more translations failed. isTranslationDone will not be set.")
                 }
+
                 self.saveContext()
                 print("Translation finished and context saved.")
-
-                // Update UI property on main thread
-                self.isTranslationDoneForCurrentPage = true
             }
         }
     }
