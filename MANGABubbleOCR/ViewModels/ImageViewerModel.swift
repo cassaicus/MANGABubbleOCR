@@ -375,11 +375,10 @@ class ImageViewerModel: ObservableObject {
         Task {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
 
-            // 1. Create a translation session.
-            // The initializer arguments and language codes are corrected based on build errors.
-            let session = TranslationSession(installedSource: Locale.Language("ja"), target: Locale.Language("en"))
+            // 1. Create a translation session using the corrected initializer.
+            let session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
 
-            // 2. Get image data and hash to find the correct Page entity.
+            // 2. Get image data and hash.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
                   let imageData = nsImage.tiffRepresentation else {
                 print("Error: Failed to load image for translation.")
@@ -387,37 +386,41 @@ class ImageViewerModel: ObservableObject {
             }
             let imageHash = DataHasher.computeSHA256(for: imageData)
 
-            // 3. Fetch bubbles from Core Data synchronously on the context's queue.
-            // This is safe because we are on a background thread (inside a Task).
-            let bubblesToTranslate = self.viewContext.performAndWait {
+            // 3. Fetch data needed for translation from Core Data into a thread-safe format.
+            let bubblesToTranslate: [(objectID: NSManagedObjectID, text: String)] = self.viewContext.performAndWait {
                 let request: NSFetchRequest<Page> = Page.fetchRequest()
                 request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
                 guard let page = try? self.viewContext.fetch(request).first,
                       let bubbles = page.bubbles as? Set<BubbleEntity> else {
                     return []
                 }
-                return Array(bubbles)
+                // Extract the necessary data into a thread-safe structure to pass across threads.
+                return bubbles.compactMap { bubble in
+                    guard let text = bubble.ocrText, !text.isEmpty else { return nil }
+                    return (objectID: bubble.objectID, text: text)
+                }
             }
 
             guard !bubblesToTranslate.isEmpty else {
-                print("No bubbles found in Core Data to translate.")
+                print("No bubbles with text found to translate.")
                 return
             }
 
-            // 4. Translate each bubble asynchronously.
-            for bubble in bubblesToTranslate {
-                guard let japaneseText = bubble.ocrText, !japaneseText.isEmpty else { continue }
-                let request = TranslationSession.Request(sourceText: japaneseText)
+            // 4. Translate each bubble using the thread-safe data.
+            for bubbleData in bubblesToTranslate {
+                let request = TranslationSession.Request(sourceText: bubbleData.text)
 
                 do {
                     let response = try await session.translation(for: request)
-                    // Update the Core Data object on its context's queue.
+                    // Get back on the Core Data queue to find the object by its ID and update it.
                     self.viewContext.perform {
-                        bubble.translatedText = response.targetText
-                        print("Translated '\(japaneseText)' to '\(response.targetText)'")
+                        if let bubbleToUpdate = try? self.viewContext.existingObject(with: bubbleData.objectID) as? BubbleEntity {
+                            bubbleToUpdate.translatedText = response.targetText
+                            print("Translated '\(bubbleData.text)' to '\(response.targetText)'")
+                        }
                     }
                 } catch {
-                    print("Failed to translate bubble \(bubble.bubbleID?.uuidString ?? "N/A"): \(error.localizedDescription)")
+                    print("Failed to translate text '\(bubbleData.text)': \(error.localizedDescription)")
                 }
             }
 
