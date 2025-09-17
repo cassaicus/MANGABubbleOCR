@@ -408,15 +408,15 @@ class ImageViewerModel: ObservableObject {
 
             // 4. Translate each bubble using the thread-safe data.
             for bubbleData in bubblesToTranslate {
-                let request = TranslationSession.Request(sourceText: bubbleData.text)
-
                 do {
-                    let response = try await session.translation(for: request)
+                    // The 'translate' method takes the source String directly.
+                    let translatedText = try await session.translate(bubbleData.text)
+
                     // Get back on the Core Data queue to find the object by its ID and update it.
                     self.viewContext.perform {
                         if let bubbleToUpdate = try? self.viewContext.existingObject(with: bubbleData.objectID) as? BubbleEntity {
-                            bubbleToUpdate.translatedText = response.targetText
-                            print("Translated '\(bubbleData.text)' to '\(response.targetText)'")
+                            bubbleToUpdate.translatedText = translatedText
+                            print("Translated '\(bubbleData.text)' to '\(translatedText)'")
                         }
                     }
                 } catch {
