@@ -375,19 +375,9 @@ class ImageViewerModel: ObservableObject {
         Task {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
 
-            // 1. Check for availability and create a translation session.
-            let session: TranslationSession
-            do {
-                let availability = try await Translation.availability(for: .japanese, target: .english)
-                guard availability.isAvailable else {
-                    print("Translation from Japanese to English is not available on this device.")
-                    return
-                }
-                session = TranslationSession(source: .japanese, target: .english)
-            } catch {
-                print("Failed to prepare translation session: \(error.localizedDescription)")
-                return
-            }
+            // 1. Create a translation session.
+            // The initializer arguments fix the previous build error.
+            let session = TranslationSession(source: .japanese, target: .english)
 
             // 2. Get image data and hash to find the correct Page entity.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
