@@ -378,16 +378,31 @@ class ImageViewerModel: ObservableObject {
             print("Starting translation for page: \(imageURL.lastPathComponent)")
 
             // 1. Create a translation session using the corrected initializer.
-            let session: TranslationSession
-            if #available(macOS 26.0, *) {
-                session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
-            } else {
-                // Fallback on earlier versions
-                print("Fallback on earlier versions")
+//            let session: TranslationSession
+//            if #available(macOS 26.0, *) {
+//                session = TranslationSession(installedSource: Locale.Language(identifier: "ja"), target: Locale.Language(identifier: "en"))
+//            } else {
+//                // Fallback on earlier versions
+//                print("Fallback on earlier versions")
+//
+//                return
+//            }
 
+            
+            guard #available(macOS 26.0, *) else {
+                print("Fallback on earlier versions")
                 return
             }
 
+            let session = TranslationSession(
+                installedSource: Locale.Language(identifier: "ja"),
+                target: Locale.Language(identifier: "en")
+            )
+
+//            let response = try await session.translate(bubbleData.text)
+            
+            
+            
             // 2. Get image data and hash.
             guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
                   let imageData = nsImage.tiffRepresentation else {
