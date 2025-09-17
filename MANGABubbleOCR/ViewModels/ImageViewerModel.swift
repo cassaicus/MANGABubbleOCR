@@ -762,12 +762,12 @@ class ImageViewerModel: ObservableObject {
                 while fontSize > 6 {
                     let font = NSFont.boldSystemFont(ofSize: fontSize)
                     attributes[.font] = font
-                    let constraintRect = CGSize(width: finalRect.width * 0.9, height: .greatestFiniteMagnitude)
+                    let constraintRect = CGSize(width: finalRect.width * 0.8, height: .greatestFiniteMagnitude)
                     let boundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
                     // The font size is acceptable only if the text fits both horizontally and vertically.
                     // テキストが水平方向と垂直方向の両方に収まる場合にのみ、そのフォントサイズは許容されます。
-                    if boundingBox.height <= finalRect.height * 0.9 && boundingBox.width <= finalRect.width * 0.9 {
+                    if boundingBox.height <= finalRect.height * 0.8 && boundingBox.width <= finalRect.width * 0.8 {
                         break // Font size is good
                     }
                     fontSize -= 2
@@ -778,15 +778,8 @@ class ImageViewerModel: ObservableObject {
                 let constraintRect = CGSize(width: finalRect.width, height: finalRect.height)
                 let finalBoundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
-                // To counteract minor clipping of characters with descenders (like 'g', 'y'),
-                // we shift the final text block up slightly. A shift of 10% of the font size
-                // is a safe value that shouldn't cause clipping at the top.
-                // 'g'や'y'のようなディセンダを持つ文字のわずかなクリッピングを解消するため、
-                // 最終的なテキストブロックをわずかに上にシフトします。フォントサイズの10%のシフトは、
-                // 上部でのクリッピングを引き起こさない安全な値です。
-                let verticalOffset = fontSize * 0.1
                 let textRect = CGRect(x: finalRect.origin.x,
-                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2 + verticalOffset,
+                                      y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2,
                                       width: finalRect.width,
                                       height: finalBoundingBox.height)
 
