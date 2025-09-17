@@ -44,8 +44,36 @@ class ImageViewerModel: ObservableObject {
     @Published var pages: [MangaPage] = []
 
     /// The index of the currently displayed page within the `pages` array.
+    /// When the index changes, `updatePageStatus` is called to refresh the UI state.
     /// `pages`配列内での現在表示ページのインデックス。
-    @Published var currentIndex: Int = 0
+    /// インデックスが変更されると、`updatePageStatus`が呼び出されてUIの状態が更新されます。
+    @Published var currentIndex: Int = 0 {
+        didSet {
+            if oldValue != currentIndex {
+                updatePageStatus()
+            }
+        }
+    }
+
+    /// A flag indicating if bubble extraction is complete for the current page. Bound to the UI.
+    /// 現在のページでフキダシ抽出が完了したかどうかを示すフラグ。UIにバインドされます。
+    @Published var isExtractionDoneForCurrentPage: Bool = false
+
+    /// A flag indicating if translation is complete for the current page. Bound to the UI.
+    /// 現在のページで翻訳が完了したかどうかを示すフラグ。UIにバインドされます。
+    @Published var isTranslationDoneForCurrentPage: Bool = false
+
+    /// A flag to control the visibility of the translation overlay.
+    /// 翻訳オーバーレイの表示を制御するためのフラグ。
+    @Published var showingOverlay: Bool = false {
+        didSet {
+            updateOverlay()
+        }
+    }
+
+    /// Holds the generated image with the translation overlay.
+    /// 翻訳オーバーレイ付きで生成された画像を保持します。
+    @Published var overlayImage: NSImage? = nil
 
     // MARK: - Core Components
 
@@ -107,6 +135,10 @@ class ImageViewerModel: ObservableObject {
         // Start prefetching thumbnails for the new pages in the background.
         // バックグラウンドで新しいページのサムネイルのプリフェッチを開始します。
         ThumbnailPrefetcher.shared.prefetchThumbnails(for: urls)
+
+        // Update the status for the newly set first page.
+        // 新しく設定された最初のページのステータスを更新します。
+        updatePageStatus()
     }
 
     /// Asynchronously loads images from a specified folder URL and updates the pages list.
@@ -241,7 +273,16 @@ class ImageViewerModel: ObservableObject {
             // 全てのOCRタスクがディスパッチされた後、それらがすべて完了したときに
             // コンテキストをディスクに保存するための通知を設定します。
             ocrDispatchGroup.notify(queue: .main) {
-                self.saveContext()
+                print("All OCR tasks finished. Setting isExtractionDone to true.")
+                page.isExtractionDone = true
+                self.saveContext() // This saves the bubbles and the new flag.
+
+                // We are on the main thread, so we can update the UI property.
+                // Check if the updated page is still the one being displayed.
+                if self.pages.indices.contains(self.currentIndex) &&
+                    self.pages[self.currentIndex].sourceURL.lastPathComponent == originalFileName {
+                    self.isExtractionDoneForCurrentPage = true
+                }
             }
         }
     }
@@ -411,23 +452,24 @@ class ImageViewerModel: ObservableObject {
             }
             let imageHash = DataHasher.computeSHA256(for: imageData)
 
-            // 3. Fetch data needed for translation from Core Data into a thread-safe format.
-            let bubblesToTranslate: [(objectID: NSManagedObjectID, text: String)] = self.viewContext.performAndWait {
+            // 3. Fetch data needed for translation from Core Data.
+            let (pageObjectID, bubblesToTranslate): (NSManagedObjectID?, [(objectID: NSManagedObjectID, text: String)]) = self.viewContext.performAndWait {
                 let request: NSFetchRequest<Page> = Page.fetchRequest()
                 request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
                 guard let page = try? self.viewContext.fetch(request).first,
                       let bubbles = page.bubbles as? Set<BubbleEntity> else {
-                    return []
+                    return (nil, [])
                 }
                 // Extract the necessary data into a thread-safe structure to pass across threads.
-                return bubbles.compactMap { bubble in
+                let bubbleData = bubbles.compactMap { bubble -> (NSManagedObjectID, String)? in
                     guard let text = bubble.ocrText, !text.isEmpty else { return nil }
                     return (objectID: bubble.objectID, text: text)
                 }
+                return (page.objectID, bubbleData)
             }
 
-            guard !bubblesToTranslate.isEmpty else {
-                print("No bubbles with text found to translate.")
+            guard let pageObjectID = pageObjectID, !bubblesToTranslate.isEmpty else {
+                print("No page or no bubbles with text found to translate.")
                 return
             }
 
@@ -459,10 +501,17 @@ class ImageViewerModel: ObservableObject {
                 }
             }
 
-            // 5. Save the context once all translation tasks are dispatched.
+            // 5. Save the context and update the flag.
             await self.viewContext.perform {
+                if let pageToUpdate = try? self.viewContext.existingObject(with: pageObjectID) as? Page {
+                    pageToUpdate.isTranslationDone = true
+                    print("Setting isTranslationDone to true for page.")
+                }
                 self.saveContext()
                 print("Translation finished and context saved.")
+
+                // Update UI property on main thread
+                self.isTranslationDoneForCurrentPage = true
             }
         }
     }
@@ -565,5 +614,144 @@ class ImageViewerModel: ObservableObject {
         } catch {
             print("Failed to save failed OCR sample: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Page Status & Overlay Management
+
+    private func updatePageStatus() {
+        guard currentIndex < pages.count else {
+            isExtractionDoneForCurrentPage = false
+            isTranslationDoneForCurrentPage = false
+            showingOverlay = false
+            return
+        }
+        let currentPage = pages[currentIndex]
+        let imageURL = currentPage.sourceURL
+
+        Task {
+            guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
+                  let imageData = nsImage.tiffRepresentation else {
+                await MainActor.run {
+                    self.isExtractionDoneForCurrentPage = false
+                    self.isTranslationDoneForCurrentPage = false
+                    self.showingOverlay = false
+                }
+                return
+            }
+            let imageHash = DataHasher.computeSHA256(for: imageData)
+
+            let pageStatus = await viewContext.perform {
+                let request: NSFetchRequest<Page> = Page.fetchRequest()
+                request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
+                request.fetchLimit = 1
+                guard let page = try? self.viewContext.fetch(request).first else {
+                    return (isExtractionDone: false, isTranslationDone: false)
+                }
+                return (isExtractionDone: page.isExtractionDone, isTranslationDone: page.isTranslationDone)
+            }
+
+            await MainActor.run {
+                self.isExtractionDoneForCurrentPage = pageStatus.isExtractionDone
+                self.isTranslationDoneForCurrentPage = pageStatus.isTranslationDone
+                self.showingOverlay = false
+            }
+        }
+    }
+
+    private func updateOverlay() {
+        Task {
+            if showingOverlay {
+                await createOverlayImage()
+            } else {
+                // Clear the image when not showing the overlay
+                await MainActor.run {
+                    self.overlayImage = nil
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func createOverlayImage() async {
+        guard currentIndex < pages.count else { return }
+        let currentPage = pages[currentIndex]
+        let imageURL = currentPage.sourceURL
+
+        // 1. Load Original Image
+        guard let originalImage = await ImageCache.shared.fullImage(for: imageURL),
+              let imageData = originalImage.tiffRepresentation else {
+            print("Could not load original image for overlay.")
+            return
+        }
+        let imageHash = DataHasher.computeSHA256(for: imageData)
+
+        // 2. Fetch Bubbles from Core Data
+        let bubbles: [BubbleEntity] = await viewContext.perform {
+            let request: NSFetchRequest<Page> = Page.fetchRequest()
+            request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
+            guard let page = try? self.viewContext.fetch(request).first,
+                  let bubbleSet = page.bubbles as? Set<BubbleEntity> else {
+                return []
+            }
+            return Array(bubbleSet)
+        }
+
+        guard !bubbles.isEmpty else {
+            print("No bubbles found to draw overlay for.")
+            return
+        }
+
+        // 3. Render new image
+        let newImage = NSImage(size: originalImage.size, flipped: false) { (dstRect) -> Bool in
+            originalImage.draw(in: dstRect)
+
+            for bubble in bubbles {
+                guard let translatedText = bubble.translatedText, !translatedText.isEmpty else { continue }
+
+                let bubbleRect = CGRect(x: bubble.x, y: bubble.y, width: bubble.width, height: bubble.height)
+
+                NSColor.white.setFill()
+                bubbleRect.fill()
+
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.alignment = .center
+                paragraphStyle.lineBreakMode = .byWordWrapping
+
+                var fontSize: CGFloat = 40
+                var attributes: [NSAttributedString.Key: Any] = [
+                    .paragraphStyle: paragraphStyle,
+                    .foregroundColor: NSColor.black
+                ]
+
+                // Adjust font size to fit bubble
+                while fontSize > 6 {
+                    let font = NSFont.boldSystemFont(ofSize: fontSize)
+                    attributes[.font] = font
+                    let constraintRect = CGSize(width: bubbleRect.width * 0.9, height: .greatestFiniteMagnitude)
+                    let boundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
+
+                    if boundingBox.height <= bubbleRect.height * 0.9 {
+                        break // Font size is good
+                    }
+                    fontSize -= 2
+                }
+
+                let font = NSFont.boldSystemFont(ofSize: fontSize)
+                attributes[.font] = font
+                let constraintRect = CGSize(width: bubbleRect.width, height: bubbleRect.height)
+                let finalBoundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
+
+                let textRect = CGRect(x: bubbleRect.origin.x,
+                                      y: bubbleRect.origin.y + (bubbleRect.height - finalBoundingBox.height) / 2,
+                                      width: bubbleRect.width,
+                                      height: finalBoundingBox.height)
+
+                translatedText.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
+            }
+            return true
+        }
+
+        // 4. Update the published property
+        self.overlayImage = newImage
     }
 }

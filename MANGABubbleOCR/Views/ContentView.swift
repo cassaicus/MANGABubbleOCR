@@ -25,13 +25,22 @@ struct ContentView: View {
             } else {
                 // showThumbnailsがtrueの場合の処理。
                 if showThumbnails {
-                    // 新しく作成したサムネイル表示ビューを呼び出します。
-                    // showThumbnailsの状態をBindingで渡すことで、サムネイルビュー側での表示切替を可能にします。
+                    // A view to display thumbnails of all pages.
                     ThumbnailScrollView(showThumbnails: $showThumbnails)
                 } else {
-                    // 1枚の画像をスライド表示するためのビュー。
-                    PageControllerView(model: model)
-                        .ignoresSafeArea() // セーフエリアを無視して全画面に広げます。
+                    // The main image viewer, wrapped in a ZStack to allow an overlay.
+                    ZStack {
+                        PageControllerView(model: model)
+                            .ignoresSafeArea()
+
+                        // If an overlay image is generated and the overlay is toggled on, display it.
+                        if let overlay = model.overlayImage, model.showingOverlay {
+                            Image(nsImage: overlay)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .ignoresSafeArea()
+                        }
+                    }
                 }
             }
             
@@ -56,24 +65,48 @@ struct ContentView: View {
                             .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            // セリフ抽出を実行するためのボタン
-                            Button("セリフを抽出") {
-                                model.analyzeCurrentImageForTextBubbles()
+                            // --- Action Buttons ---
+
+                            // 1. Extract Bubbles Button
+                            HStack {
+                                if model.isExtractionDoneForCurrentPage {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                }
+                                Button("セリフを抽出") {
+                                    model.analyzeCurrentImageForTextBubbles()
+                                }
                             }
                             .padding(8)
                             .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                            // セリフ翻訳を実行するためのボタン
-                            Button("セリフを翻訳") {
-                                Task {
-                                    if #available(macOS 14.0, *) {
-                                        model.translateCurrentImageBubbles()
-                                    } else {
-                                        print("Translation feature requires macOS 14.0 or later.")
+                            // 2. Translate Bubbles Button
+                            HStack {
+                                if model.isTranslationDoneForCurrentPage {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                }
+                                Button("セリフを翻訳") {
+                                    Task {
+                                        if #available(macOS 14.0, *) {
+                                            model.translateCurrentImageBubbles()
+                                        } else {
+                                            print("Translation feature requires macOS 14.0 or later.")
+                                        }
                                     }
                                 }
+                                .disabled(!model.isExtractionDoneForCurrentPage)
                             }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            // 3. Show/Hide Translation Overlay Button
+                            Button(model.showingOverlay ? "翻訳を隠す" : "翻訳を表示") {
+                                model.showingOverlay.toggle()
+                            }
+                            .disabled(!model.isTranslationDoneForCurrentPage)
                             .padding(8)
                             .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
