@@ -765,7 +765,9 @@ class ImageViewerModel: ObservableObject {
                     let constraintRect = CGSize(width: finalRect.width * 0.9, height: .greatestFiniteMagnitude)
                     let boundingBox = translatedText.boundingRect(with: constraintRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
 
-                    if boundingBox.height <= finalRect.height * 0.9 {
+                    // The font size is acceptable only if the text fits both horizontally and vertically.
+                    // テキストが水平方向と垂直方向の両方に収まる場合にのみ、そのフォントサイズは許容されます。
+                    if boundingBox.height <= finalRect.height * 0.9 && boundingBox.width <= finalRect.width * 0.9 {
                         break // Font size is good
                     }
                     fontSize -= 2
