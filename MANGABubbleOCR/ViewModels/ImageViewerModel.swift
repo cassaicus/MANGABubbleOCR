@@ -781,8 +781,9 @@ class ImageViewerModel: ObservableObject {
                 let textRect = CGRect(x: finalRect.origin.x,
                                       y: finalRect.origin.y + (finalRect.height - finalBoundingBox.height) / 2,
                                       width: finalRect.width,
-                                      height: finalBoundingBox.height)
-
+                                      height: (finalBoundingBox.height * 1.2))
+                
+                
                 translatedText.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: attributes)
             }
             return true
