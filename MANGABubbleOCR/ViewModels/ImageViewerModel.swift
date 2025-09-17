@@ -436,7 +436,7 @@ class ImageViewerModel: ObservableObject {
             let imageHash = DataHasher.computeSHA256(for: imageData)
 
             // 1. Fetch data on the main thread in a non-blocking way
-            let bubblesToTranslate = await MainActor.run { () -> [(NSManagedObjectID, String)]? in
+            let bubblesToTranslate = await MainActor.run { () -> [(objectID: NSManagedObjectID, text: String)]? in
                 let request: NSFetchRequest<Page> = Page.fetchRequest()
                 request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
                 guard let page = (try? self.viewContext.fetch(request))?.first,
@@ -445,7 +445,7 @@ class ImageViewerModel: ObservableObject {
                 }
                 return bubbles.compactMap { bubble in
                     guard let text = bubble.ocrText, !text.isEmpty else { return nil }
-                    return (bubble.objectID, text)
+                    return (objectID: bubble.objectID, text: text)
                 }
             }
 
