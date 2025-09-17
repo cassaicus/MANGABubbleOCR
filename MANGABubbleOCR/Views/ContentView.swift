@@ -68,7 +68,7 @@ struct ContentView: View {
                             Button("セリフを翻訳") {
                                 Task {
                                     if #available(macOS 14.0, *) {
-                                        await model.translateCurrentImageBubbles()
+                                        model.translateCurrentImageBubbles()
                                     } else {
                                         print("Translation feature requires macOS 14.0 or later.")
                                     }
