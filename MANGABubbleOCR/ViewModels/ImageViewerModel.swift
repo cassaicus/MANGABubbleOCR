@@ -695,7 +695,8 @@ class ImageViewerModel: ObservableObject {
             for bubble in bubbles {
                 guard let translatedText = bubble.translatedText, !translatedText.isEmpty else { continue }
 
-                let bubbleRect = CGRect(x: bubble.x, y: bubble.y, width: bubble.width, height: bubble.height)
+                let scale: CGFloat = 0.5
+                let bubbleRect = CGRect(x: bubble.x * scale, y: bubble.y * scale, width: bubble.width * scale, height: bubble.height * scale)
 
                 NSColor.white.setFill()
                 bubbleRect.fill()
