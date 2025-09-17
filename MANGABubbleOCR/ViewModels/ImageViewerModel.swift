@@ -690,14 +690,48 @@ class ImageViewerModel: ObservableObject {
 
         // 3. Render new image
         let newImage = NSImage(size: originalImage.size, flipped: false) { (dstRect) -> Bool in
+            // Draw the original image first to act as the background.
+            // 背景として機能するように、まず元の画像を描画します。
             originalImage.draw(in: dstRect)
+
+            // To correctly scale the bubble coordinates (which are in pixels) to the drawing context
+            // (which is in points), we need to find the relationship between the image's pixel
+            // dimensions and its point dimensions.
+            // バブルの座標（ピクセル単位）を描画コンテキスト（ポイント単位）に正しくスケーリングするには、
+            // 画像のピクセルサイズとポイントサイズの関係を見つける必要があります。
+            guard let rep = originalImage.representations.first as? NSBitmapImageRep else {
+                print("Error: Could not get NSBitmapImageRep from NSImage to determine pixel size.")
+                return false
+            }
+
+            let pixelSize = CGSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+
+            // Avoid division by zero if the image has no pixels.
+            // 画像にピクセルがない場合にゼロ除算を回避します。
+            guard pixelSize.width > 0, pixelSize.height > 0 else {
+                print("Error: Image pixel dimensions are zero.")
+                return false
+            }
+
+            // Calculate the dynamic scaling factors.
+            // 動的なスケーリングファクターを計算します。
+            let scaleX = originalImage.size.width / pixelSize.width
+            let scaleY = originalImage.size.height / pixelSize.height
 
             for bubble in bubbles {
                 guard let translatedText = bubble.translatedText, !translatedText.isEmpty else { continue }
 
-                let scale: CGFloat = 0.5
-                let bubbleRect = CGRect(x: bubble.x * scale, y: bubble.y * scale, width: bubble.width * scale, height: bubble.height * scale)
+                // Apply the dynamic scales to the raw pixel coordinates.
+                // 動的なスケールを生のピクセル座標に適用します。
+                let bubbleRect = CGRect(
+                    x: bubble.x * scaleX,
+                    y: bubble.y * scaleY,
+                    width: bubble.width * scaleX,
+                    height: bubble.height * scaleY
+                )
 
+                // Fill the bubble's background.
+                // フキダシの背景を塗りつぶします。
                 NSColor.white.setFill()
                 bubbleRect.fill()
 
