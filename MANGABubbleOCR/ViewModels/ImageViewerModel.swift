@@ -3,6 +3,7 @@ import Vision
 import CoreML
 import CoreData
 import AppKit // For NSBitmapImageRep
+import Translation
 
 /**
  `ImageViewerModel` is the primary ViewModel that manages the application's UI state and data flow for manga viewing and analysis.
@@ -360,6 +361,61 @@ class ImageViewerModel: ObservableObject {
         bubble.ocrStatus = isSuccess ? "success" : "failure"
 
         print("OCR Result for bubble [\(bubble.bubbleID!)] with engine [\(result.identifier)]: \(result.text)")
+    }
+
+    // MARK: - Text Translation
+
+    /// Translates the text bubbles for the currently displayed image from Japanese to English.
+    @available(macOS 14.0, *)
+    func translateCurrentImageBubbles() async {
+        guard currentIndex < pages.count else { return }
+        let currentPage = pages[currentIndex]
+        let imageURL = currentPage.sourceURL
+
+        print("Starting translation for page: \(imageURL.lastPathComponent)")
+
+        // 1. Get image data and hash to find the correct Page entity
+        guard let nsImage = await ImageCache.shared.fullImage(for: imageURL),
+              let imageData = nsImage.tiffRepresentation else {
+            print("Error: Failed to load image or convert it to data for translation.")
+            return
+        }
+        let imageHash = DataHasher.computeSHA256(for: imageData)
+
+        // 2. Fetch the Page and its bubbles from Core Data
+        await viewContext.perform {
+            let request: NSFetchRequest<Page> = Page.fetchRequest()
+            request.predicate = NSPredicate(format: "fileHash == %@", imageHash)
+
+            guard let page = try? self.viewContext.fetch(request).first,
+                  let bubbles = page.bubbles as? Set<BubbleEntity>, !bubbles.isEmpty else {
+                print("No page or bubbles found in Core Data for hash: \(imageHash)")
+                return
+            }
+
+            // 3. Perform translation for each bubble
+            do {
+                let session = TranslationSession()
+                for bubble in bubbles {
+                    guard let japaneseText = bubble.ocrText, !japaneseText.isEmpty else {
+                        continue
+                    }
+
+                    let request = TranslationSession.Request(sourceText: japaneseText, sourceLanguage: .japanese, targetLanguage: .english)
+
+                    let response = try await session.translation(for: request)
+                    bubble.translatedText = response.targetText
+                    print("Translated '\(japaneseText)' to '\(response.targetText)'")
+                }
+
+                // 4. Save the updated bubbles
+                self.saveContext()
+                print("Translation finished and context saved.")
+
+            } catch {
+                print("An error occurred during translation: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Core Data Helper Methods

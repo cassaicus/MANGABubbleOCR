@@ -63,6 +63,20 @@ struct ContentView: View {
                             .padding(8)
                             .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            // セリフ翻訳を実行するためのボタン
+                            Button("セリフを翻訳") {
+                                Task {
+                                    if #available(macOS 14.0, *) {
+                                        await model.translateCurrentImageBubbles()
+                                    } else {
+                                        print("Translation feature requires macOS 14.0 or later.")
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
 
                         // フォルダを選択するためのボタン。
