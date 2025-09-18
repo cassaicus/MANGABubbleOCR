@@ -75,4 +75,60 @@ struct PersistenceController {
         // UIを更新するために不可欠です。
         container.viewContext.automaticallyMergesChangesFromParent = true
     }
+
+    /// Deletes all data from the Core Data store.
+    /// Core Dataストアからすべてのデータを削除します。
+    ///
+    /// This method uses `NSBatchDeleteRequest` to efficiently remove all objects
+    /// for the `Book`, `Page`, and `BubbleEntity` entities.
+    /// このメソッドは`NSBatchDeleteRequest`を使用して、`Book`、`Page`、および`BubbleEntity`エンティティの
+    /// すべてのオブジェクトを効率的に削除します。
+    func deleteAllData() {
+        // An array of entity names to be deleted.
+        // 削除するエンティティ名の配列。
+        let entityNames = ["Book", "Page", "BubbleEntity"]
+
+        // Get the managed object context from the container.
+        // コンテナから管理オブジェクトコンテキストを取得します。
+        let context = container.viewContext
+
+        // Iterate over the entity names and perform a batch delete for each.
+        // エンティティ名を反復処理し、それぞれに対してバッチ削除を実行します。
+        entityNames.forEach { entityName in
+            // Create a fetch request for the entity.
+            // エンティティのフェッチリクエストを作成します。
+            let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: entityName)
+
+            // Create a batch delete request with the fetch request.
+            // フェッチリクエストを使用してバッチ削除リクエストを作成します。
+            let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+            // Set the result type to notify the context of the object IDs that were deleted.
+            // This is important for the UI to update correctly after the deletion.
+            deleteRequest.resultType = .resultTypeObjectIDs
+
+            do {
+                // Execute the batch delete request and get the result.
+                // バッチ削除リクエストを実行し、結果を取得します。
+                let result = try context.execute(deleteRequest) as? NSBatchDeleteResult
+
+                // Get the array of managed object IDs that were deleted.
+                // 削除された管理オブジェクトIDの配列を取得します。
+                guard let objectIDs = result?.result as? [NSManagedObjectID] else { return }
+
+                // Create a dictionary with the deleted object IDs to merge the changes
+                // into the managed object context.
+                // 削除されたオブジェクトIDで辞書を作成し、変更を管理オブジェクトコンテキストに
+                // マージします。
+                let changes = [NSDeletedObjectsKey: objectIDs]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [context])
+
+            } catch let error as NSError {
+                // Handle any errors that occur during the batch delete.
+                // In a real application, this should be handled more gracefully.
+                // バッチ削除中に発生したエラーを処理します。
+                // 実際のアプリケーションでは、これをより優雅に処理する必要があります。
+                print("Could not batch delete \(entityName). \(error), \(error.userInfo)")
+            }
+        }
+    }
 }

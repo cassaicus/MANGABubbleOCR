@@ -8,6 +8,7 @@ struct ContentView: View {
     // サムネイル表示と1枚表示を切り替えるための状態を管理するプロパティ。
     // @Stateプロパティラッパーにより、この値が変更されるとビューが再描画されます。
     @State private var showThumbnails = false
+    @State private var showingDeleteAlert = false
     
     // ビューの本体を定義します。
     var body: some View {
@@ -124,6 +125,16 @@ struct ContentView: View {
 
                         }
 
+                        // データを全て削除するためのボタン
+                        if !model.pages.isEmpty {
+                            Button("データを全て削除", role: .destructive) {
+                                showingDeleteAlert = true
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
                         // フォルダを選択するためのボタン。
                         Button("フォルダを選択") {
                             // ボタンがタップされたらモデルのメソッドを呼び出します。
@@ -136,6 +147,14 @@ struct ContentView: View {
                 }
                 .padding() // HStackの周りに余白を追加します。
             }
+        }
+        .alert("全てのデータを削除しますか？", isPresented: $showingDeleteAlert) {
+            Button("削除", role: .destructive) {
+                model.deleteAllDataAndReset()
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("この操作は取り消せません。全ての書籍、ページ、抽出されたテキストが削除されます。")
         }
     }
 }

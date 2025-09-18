@@ -123,6 +123,29 @@ class ImageViewerModel: ObservableObject {
         }
     }
 
+    // MARK: - Data Management
+
+    /// Deletes all Core Data records and resets the view model's state.
+    /// 全てのCore Dataレコードを削除し、ビューモデルの状態をリセットします。
+    func deleteAllDataAndReset() {
+        // First, call the persistence controller to delete all data from the store.
+        // 最初に、永続化コントローラーを呼び出してストアから全てのデータを削除します。
+        PersistenceController.shared.deleteAllData()
+
+        // Then, reset the state of the view model on the main thread
+        // to ensure the UI updates correctly.
+        // 次に、メインスreadでビューモデルの状態をリセットし、
+        // UIが正しく更新されるようにします。
+        DispatchQueue.main.async {
+            self.pages = []
+            self.currentIndex = 0
+            self.isExtractionDoneForCurrentPage = false
+            self.isTranslationDoneForCurrentPage = false
+            self.showingOverlay = false
+            self.overlayImage = nil
+        }
+    }
+
     // MARK: - Public Methods for Page Management
 
     /// Updates the model with a new list of pages.
