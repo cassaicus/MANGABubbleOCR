@@ -161,7 +161,7 @@ class OCREngine {
                 throw OCREngineError.predictionError(error)
             }
 
-            guard let logits = output.var_1114 as? MLMultiArray else {
+            guard let logits = output.var_1119 as? MLMultiArray else {
                 throw OCREngineError.unexpectedModelOutput
             }
 
