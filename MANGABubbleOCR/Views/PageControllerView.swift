@@ -18,9 +18,25 @@ struct PageControllerView: NSViewControllerRepresentable {
     
     // SwiftUIビューの状態が更新されたときに呼び出され、NSViewControllerを更新します。
     func updateNSViewController(_ nsViewController: PageController, context: Context) {
-        // ビューコントローラーのモデルを最新の状態に更新します。
+        // First, ensure the controller's model reference is up-to-date.
+        // まず、コントローラーのモデル参照を最新の状態に保ちます。
         nsViewController.model = model
-        // ビューコントローラーにデータを再読み込みさせて、表示を更新します。
+
+        // If the pages array is empty, it means the data was just deleted and this
+        // view is being torn down. We must avoid calling reloadData(), which causes
+        // a crash due to an out-of-bounds index access within the NSPageController.
+        // pages配列が空の場合、データが削除され、このビューが破棄されようとしていることを
+        // 意味します。NSPageController内で範囲外のインデックスアクセスを引き起こす
+        // reloadData()の呼び出しを避けなければなりません。
+        if model.pages.isEmpty {
+            // Safely clear the controller's content and exit.
+            // コントローラーのコンテンツを安全にクリアして終了します。
+            nsViewController.arrangedObjects = []
+            return
+        }
+
+        // If there are pages, proceed with the normal update.
+        // ページが存在する場合は、通常の更新処理を続行します。
         nsViewController.reloadData()
     }
 }
