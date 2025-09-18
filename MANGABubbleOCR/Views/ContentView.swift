@@ -125,15 +125,6 @@ struct ContentView: View {
 
                         }
 
-                        // データを全て削除するためのボタン
-                        if !model.pages.isEmpty {
-                            Button("データを全て削除", role: .destructive) {
-                                showingDeleteAlert = true
-                            }
-                            .padding(8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
 
                         // フォルダを選択するためのボタン。
                         Button("フォルダを選択") {
@@ -143,6 +134,19 @@ struct ContentView: View {
                         .padding(8) // ボタンの周りに8ポイントの余白を追加します。
                         .background(.ultraThinMaterial) // 半透明の背景効果を適用します。
                         .clipShape(RoundedRectangle(cornerRadius: 8)) // 角を丸くします。
+                        
+                        // データを全て削除するためのボタン
+                        if !model.pages.isEmpty {
+                            Button("データを全て削除して終了", role: .destructive) {
+                                showingDeleteAlert = true
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        
+                        
                     }
                 }
                 .padding() // HStackの周りに余白を追加します。
