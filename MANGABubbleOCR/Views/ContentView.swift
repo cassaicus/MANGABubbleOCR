@@ -17,8 +17,8 @@ struct ContentView: View {
             // 背景を黒色に設定し、セーフエリアを無視して全画面に広げます。
             Color.black.ignoresSafeArea()
             
-            // 表示するページがまだ読み込まれていない場合の処理。
-            if model.pages.isEmpty {
+            // 表示するページがまだ読み込まれていない場合、またはコンテンツが一時的に非表示にされている場合の処理。
+            if model.pages.isEmpty || !model.isContentVisible {
                 // ユーザーにフォルダ選択を促すテキストを表示します。
                 Text("フォルダを選んで jpg を読み込んでください")
                     .foregroundColor(.white) // テキストの色を白に設定します。
