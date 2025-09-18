@@ -75,10 +75,6 @@ class ImageViewerModel: ObservableObject {
     /// 翻訳オーバーレイ付きで生成された画像を保持します。
     @Published var overlayImage: NSImage? = nil
 
-    /// A flag to control the visibility of the main content view, used to prevent crashes during data deletion.
-    /// データ削除時のクラッシュを防ぐためにメインコンテンツビューの表示を制御するフラグ。
-    @Published var isContentVisible: Bool = true
-
     // MARK: - Core Components
 
     /// The main-thread `NSManagedObjectContext` for all Core Data operations.
@@ -129,42 +125,21 @@ class ImageViewerModel: ObservableObject {
 
     // MARK: - Data Management
 
-    /// Deletes all Core Data records and resets the view model's state.
-    /// 全てのCore Dataレコードを削除し、ビューモデルの状態をリセットします。
+    /// Deletes all Core Data records and then terminates the application.
+    /// 全てのCore Dataレコードを削除し、その後アプリケーションを終了します。
     ///
-    /// This function uses a two-step process to avoid a race condition that can crash the app.
-    /// It first hides the UI, then resets the data after a short delay, giving SwiftUI time
-    /// to remove the `PageControllerView` from the hierarchy before its data source becomes invalid.
-    /// この関数は、アプリをクラッシュさせる可能性のある競合状態を回避するために、2段階のプロセスを使用します。
-    /// 最初にUIを非表示にし、短い遅延の後にデータをリセットすることで、SwiftUIがデータソースが
-    /// 無効になる前に`PageControllerView`を階層から削除する時間を与えます。
+    /// This approach is taken to definitively avoid UI-related crashes that can occur
+    /// when the app's data source is removed during a live UI update.
+    /// このアプローチは、UIのライブ更新中にアプリのデータソースが削除される際に発生しうる
+    /// UI関連のクラッシュを確実に回避するために取られます。
     func deleteAllDataAndReset() {
-        // Step 1: Delete the data from the persistent store.
-        // ステップ1：永続ストアからデータを削除します。
+        // First, call the persistence controller to delete all data from the store.
+        // 最初に、永続化コントローラーを呼び出してストアから全てのデータを削除します。
         PersistenceController.shared.deleteAllData()
 
-        // Step 2: Hide the content view immediately. This will trigger the UI
-        // to switch to the "empty" state, removing the sensitive PageControllerView.
-        // ステップ2：コンテンツビューを直ちに非表示にします。これにより、UIが「空」の状態に
-        // 切り替わり、デリケートなPageControllerViewが削除されます。
-        DispatchQueue.main.async {
-            self.isContentVisible = false
-        }
-
-        // Step 3: After a short delay to allow the UI to update, reset the model's state.
-        // ステップ3：UIの更新を許可するために短い遅延の後、モデルの状態をリセットします。
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.pages = []
-            self.currentIndex = 0
-            self.isExtractionDoneForCurrentPage = false
-            self.isTranslationDoneForCurrentPage = false
-            self.showingOverlay = false
-            self.overlayImage = nil
-
-            // Step 4: Make the content view visible again. It will now show the "Select Folder" text.
-            // ステップ4：コンテンツビューを再び表示します。これにより、「フォルダを選択」テキストが表示されます。
-            self.isContentVisible = true
-        }
+        // Terminate the application.
+        // アプリケーションを終了します。
+        exit(0)
     }
 
     // MARK: - Public Methods for Page Management
