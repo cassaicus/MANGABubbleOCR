@@ -57,13 +57,13 @@ struct ContentView: View {
                         // ページが読み込まれている場合のみ、コントロールボタンを表示します。
                         if !model.pages.isEmpty {
                             // サムネイル表示と1枚表示を切り替えるためのボタン。
-                            Button(showThumbnails ? "1枚表示" : "サムネイル") {
-                                // ボタンがタップされたらshowThumbnailsの値を反転させます。
-                                showThumbnails.toggle()
-                            }
-                            .padding(8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+//                            Button(showThumbnails ? "1枚表示" : "サムネイル") {
+//                                // ボタンがタップされたらshowThumbnailsの値を反転させます。
+//                                showThumbnails.toggle()
+//                            }
+//                            .padding(8)
+//                            .background(.ultraThinMaterial)
+//                            .clipShape(RoundedRectangle(cornerRadius: 8))
 
                             // --- Action Buttons ---
 
@@ -110,6 +110,18 @@ struct ContentView: View {
                             .padding(8)
                             .background(.ultraThinMaterial)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+                            
+                            
+                            
+                            // サムネイル表示と1枚表示を切り替えるためのボタン。
+                            Button(showThumbnails ? "1枚表示" : "サムネイル") {
+                                // ボタンがタップされたらshowThumbnailsの値を反転させます。
+                                showThumbnails.toggle()
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
                         }
 
                         // フォルダを選択するためのボタン。
